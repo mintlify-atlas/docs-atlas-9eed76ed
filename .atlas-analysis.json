@@ -1,0 +1,88 @@
+{
+  "projectType": "saas",
+  "projectName": "Aqua-IoT",
+  "projectDescription": "Real-time monitoring dashboard for aquaponics systems using IoT sensors and MQTT communication",
+  "theme": "palm",
+  "primaryColor": "#fa4c2a",
+  "lightColor": "#443b33",
+  "darkColor": null,
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "architecture"
+            ]
+          },
+          {
+            "group": "Hardware Setup",
+            "pages": [
+              "hardware/arduino-sensors",
+              "hardware/raspberry-pi-bridge",
+              "hardware/mqtt-broker",
+              "hardware/wiring-diagram"
+            ]
+          },
+          {
+            "group": "Web Dashboard",
+            "pages": [
+              "dashboard/overview",
+              "dashboard/authentication",
+              "dashboard/monitoring-sensors",
+              "dashboard/data-visualization"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/installation",
+              "deployment/configuration",
+              "deployment/production-setup"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Sensor Endpoints",
+            "pages": [
+              "api/overview",
+              "api/authentication",
+              "api/temperature-aquarium",
+              "api/temperature-plants",
+              "api/humidity",
+              "api/water-level",
+              "api/light-sensor",
+              "api/tds-sensor"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Real-time sensor monitoring with Arduino and Raspberry Pi",
+    "MQTT-based IoT data pipeline for reliable communication",
+    "Django web dashboard with live data visualization",
+    "REST API for sensor data ingestion and retrieval",
+    "Multiple sensor types: temperature, humidity, water level, TDS, light",
+    "User authentication and secure access control"
+  ],
+  "publicApiSurface": [
+    "POST /api/temperatura-aquario/",
+    "POST /api/temperatura-plantas/",
+    "POST /api/umidade/",
+    "POST /api/nivel/",
+    "POST /api/ldr/",
+    "POST /api/tds/",
+    "GET /login/",
+    "GET /logout/"
+  ]
+}
