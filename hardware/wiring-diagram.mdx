@@ -1,0 +1,461 @@
+---
+title: 'Hardware Wiring & Connections'
+description: 'Complete wiring diagram and connection guide for Aqua-IoT hardware setup'
+icon: 'diagram-project'
+---
+
+## System Overview
+
+The Aqua-IoT hardware system consists of three main components:
+
+1. **Arduino** - Sensor interface and data collection
+2. **Raspberry Pi** - MQTT bridge and network gateway
+3. **Sensors** - Environmental and water quality monitoring
+
+## Complete Pin Connection Map
+
+### Arduino Uno Pin Assignments
+
+Based on `sensores.ino` configuration:
+
+| Component | Arduino Pin | Pin Type | Notes |
+|-----------|-------------|----------|-------|
+| DHT11 Data | Digital 2 | Digital I/O | Temperature & humidity sensor |
+| HC-SR04 Echo | Digital 4 | Digital Input | Ultrasonic distance sensor |
+| HC-SR04 Trigger | Digital 6 | Digital Output | Ultrasonic distance sensor |
+| DS18B20 Data | Digital 10 | OneWire | Waterproof temperature sensor |
+| LDR Signal | Analog A0 | Analog Input | Light-dependent resistor |
+| TDS Sensor | Analog A4 | Analog Input | Water quality sensor |
+| 5V Power | 5V | Power | Power supply for all sensors |
+| Ground | GND | Ground | Common ground (multiple GND pins available) |
+
+<Note>
+Arduino Uno has limited 5V current output (~400mA). If powering multiple sensors, consider using an external 5V power supply.
+</Note>
+
+## Detailed Sensor Wiring
+
+### DHT11 - Temperature & Humidity Sensor
+
+**Pin Configuration**: `DHTPIN 2` (sensores.ino:16)
+
+```
+DHT11          Arduino
+─────────      ────────
+VCC   ────────  5V
+DATA  ────────  Digital Pin 2
+NC    ────────  (Not Connected)
+GND   ────────  GND
+```
+
+**Wiring Notes**:
+- Use 3-pin or 4-pin DHT11 module
+- Built-in modules often include pull-up resistor
+- If using bare sensor, add 10kΩ pull-up resistor between VCC and DATA
+
+<Warning>
+DHT11 requires stable 5V power. Voltage drops can cause reading errors. Keep sensor wires under 20cm if possible.
+</Warning>
+
+### DS18B20 - Waterproof Temperature Sensor
+
+**Pin Configuration**: `DS18B20 10` (sensores.ino:17)
+
+```
+DS18B20        Arduino
+─────────      ────────
+Red (VCC)  ──  5V
+Yellow (DATA)  Digital Pin 10
+Black (GND) ── GND
+```
+
+**Required**: 4.7kΩ pull-up resistor between DATA (Yellow) and VCC (Red)
+
+```
+        4.7kΩ
+5V ──────/\/\/\───┬─── Digital Pin 10
+                   │
+                 (Yellow)
+```
+
+**Wiring Notes**:
+- OneWire protocol requires pull-up resistor
+- Waterproof probe version has 3 wires
+- Can use parasitic power mode (2-wire) but 3-wire is more reliable
+- Suitable for aquarium water temperature monitoring
+
+### Gravity TDS - Total Dissolved Solids Sensor
+
+**Pin Configuration**: `TdsSensorPin A4` (sensores.ino:18)
+
+```
+TDS Sensor     Arduino
+───────────    ────────
+VCC   ────────  5V
+GND   ────────  GND
+A     ────────  Analog Pin A4
+```
+
+**Configuration Parameters** (sensores.ino:51-55):
+```cpp
+gravityTds.setPin(TdsSensorPin);
+gravityTds.setAref(5.0);      // 5V reference voltage
+gravityTds.setAdcRange(1024); // 10-bit ADC resolution
+```
+
+**Wiring Notes**:
+- Probe must be fully submerged in water
+- Keep probe clean for accurate readings
+- Temperature compensation is applied using `media = 25` (25°C average)
+- Outputs PPM (parts per million) for water quality
+
+<Note>
+TDS sensor requires calibration. Use EEPROM to store calibration values for consistent readings across power cycles.
+</Note>
+
+### HC-SR04 - Ultrasonic Distance Sensor
+
+**Pin Configuration**: `echo=4`, `trigger=6` (sensores.ino:19-20)
+
+```
+HC-SR04        Arduino
+─────────      ────────
+VCC   ────────  5V
+TRIG  ────────  Digital Pin 6
+ECHO  ────────  Digital Pin 4
+GND   ────────  GND
+```
+
+**Distance Calculation** (sensores.ino:127-139):
+```cpp
+void calculo() {
+  digitalWrite(trigger, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigger, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigger, LOW);
+  
+  tempo = pulseIn(echo, HIGH);
+  // Distance = (time × speed of sound) / 2
+  distancia = float(tempo * 0.0343) / 2;
+  delay(10);
+}
+```
+
+**Wiring Notes**:
+- Measures distance: 2cm to 400cm
+- Used for water level monitoring
+- Mount sensor above water surface pointing downward
+- Speed of sound constant: 0.0343 cm/µs at 20°C
+- Returns distance in centimeters
+
+### LDR - Light Dependent Resistor
+
+**Pin Configuration**: `sensorPin = A0` (ldr.ino:9)
+
+**Voltage Divider Circuit**:
+```
+5V ───┬─── 10kΩ Resistor ───┬─── GND
+      │                      │
+      └─── LDR Sensor ───────┤
+                              │
+                              └─── Analog Pin A0
+```
+
+**Circuit Configuration** (ldr.ino:2-6):
+```cpp
+#define VIN 5      // Operating voltage
+#define R 10000    // 10kΩ fixed resistor
+```
+
+**Conversion Formula** (ldr.ino:32-40):
+```cpp
+int sensorRawToPhys(int raw) {
+  // Analog to voltage
+  float Vout = float(raw) * (VIN / float(1024));
+  
+  // Voltage to resistance
+  float RLDR = (R * (VIN - Vout)) / Vout;
+  
+  // Resistance to lumen
+  int phys = 500 / (RLDR / 1000);
+  return phys;
+}
+```
+
+**Wiring Notes**:
+- 10kΩ fixed resistor creates voltage divider
+- Output range: 0-1023 (10-bit ADC)
+- Converts to lumen for light intensity measurement
+- Used for plant environment monitoring
+
+<Warning>
+LDR polarity doesn't matter, but ensure the 10kΩ resistor is connected between LDR and GND for proper voltage divider operation.
+</Warning>
+
+## Arduino Power Considerations
+
+### Current Requirements
+
+| Component | Current Draw | Notes |
+|-----------|--------------|-------|
+| DHT11 | 1-2 mA | Low power |
+| DS18B20 | 1-1.5 mA | Low power |
+| HC-SR04 | 15 mA | During pulse |
+| TDS Sensor | 5-20 mA | Variable |
+| LDR Circuit | &lt;1 mA | Minimal |
+| **Total** | ~25-40 mA | Safe for USB power |
+
+**Power Options**:
+
+1. **USB Power** (Recommended for development)
+   - 5V from USB port (computer or wall adapter)
+   - Current limit: ~500 mA
+   - Sufficient for all sensors
+
+2. **External Power Supply**
+   - Use DC barrel jack (7-12V input)
+   - Arduino regulates to 5V
+   - Required for deployment without computer
+
+3. **Separate Sensor Power** (For reliability)
+   - External 5V power supply for sensors
+   - Connect Arduino and sensor GND together
+   - Prevents voltage drops during sensor operation
+
+## Raspberry Pi Connection
+
+### USB Serial Connection
+
+**Configuration**: `/dev/ttyACM0` at 9600 baud (mqtt-arduino.py:27)
+
+```
+Arduino USB Port  ───── USB Cable ─────  Raspberry Pi USB Port
+```
+
+**Serial Parameters**:
+```python
+ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
+```
+
+| Parameter | Value | Notes |
+|-----------|-------|-------|
+| Port | `/dev/ttyACM0` | Auto-assigned by Linux |
+| Baud Rate | 9600 | Must match Arduino: `Serial.begin(9600)` |
+| Timeout | 1 second | Read timeout for `ser.readline()` |
+| Data Bits | 8 | Default |
+| Parity | None | Default |
+| Stop Bits | 1 | Default |
+
+<Note>
+The USB connection provides both data communication and power to the Arduino. For production, use external power for Arduino.
+</Note>
+
+## Network Architecture
+
+### Raspberry Pi Network Setup
+
+```
+┌─────────────────────────────────────────┐
+│         Raspberry Pi                     │
+│  ┌─────────────────────────────────┐   │
+│  │  Python: mqtt-arduino.py        │   │
+│  │  (USB Serial Reader & Publisher)│   │
+│  └─────────────────────────────────┘   │
+│              ↓                           │
+│  ┌─────────────────────────────────┐   │
+│  │  Mosquitto MQTT Broker          │   │
+│  │  Port: 18083                    │   │
+│  └─────────────────────────────────┘   │
+│              ↓                           │
+│  ┌─────────────────────────────────┐   │
+│  │  Python: mqtt-django.py         │   │
+│  │  (MQTT Subscriber & API Client) │   │
+│  └─────────────────────────────────┘   │
+│              ↓                           │
+│      Network Connection                 │
+│      (WiFi/Ethernet)                    │
+└─────────────────────────────────────────┘
+              ↓ HTTP POST
+    ┌─────────────────────┐
+    │  Django REST API    │
+    │  Port: 8000         │
+    └─────────────────────┘
+```
+
+## Assembly Instructions
+
+<Steps>
+  <Step title="Prepare Arduino">
+    1. Install Arduino IDE and required libraries:
+       - DHT sensor library
+       - OneWire
+       - DallasTemperature
+       - GravityTDS
+    
+    2. Upload `sensores.ino` to Arduino board
+    
+    3. Test serial output:
+       ```bash
+       # Arduino IDE: Tools > Serial Monitor (9600 baud)
+       ```
+  </Step>
+
+  <Step title="Connect DHT11 sensor">
+    1. Connect VCC to Arduino 5V
+    2. Connect DATA to Digital Pin 2
+    3. Connect GND to Arduino GND
+    4. If using bare sensor, add 10kΩ pull-up resistor
+  </Step>
+
+  <Step title="Connect DS18B20 sensor">
+    1. Connect Red wire to Arduino 5V
+    2. Connect Yellow wire to Digital Pin 10
+    3. Connect Black wire to Arduino GND
+    4. **Critical**: Add 4.7kΩ pull-up resistor between Yellow and Red wires
+  </Step>
+
+  <Step title="Connect TDS sensor">
+    1. Connect sensor VCC to Arduino 5V
+    2. Connect sensor signal to Analog Pin A4
+    3. Connect sensor GND to Arduino GND
+    4. Submerge probe in water for testing
+  </Step>
+
+  <Step title="Connect HC-SR04 sensor">
+    1. Connect VCC to Arduino 5V
+    2. Connect TRIG to Digital Pin 6
+    3. Connect ECHO to Digital Pin 4
+    4. Connect GND to Arduino GND
+    5. Position sensor above water surface
+  </Step>
+
+  <Step title="Connect LDR sensor">
+    1. Build voltage divider:
+       - Connect 5V to one leg of LDR
+       - Connect other leg of LDR to Analog Pin A0
+       - Connect 10kΩ resistor from A0 to GND
+    2. Position in plant area to measure light
+  </Step>
+
+  <Step title="Connect to Raspberry Pi">
+    1. Connect Arduino USB port to Raspberry Pi USB port
+    2. Verify connection:
+       ```bash
+       ls /dev/ttyACM*
+       ```
+    3. Set permissions:
+       ```bash
+       sudo chmod 666 /dev/ttyACM0
+       ```
+  </Step>
+
+  <Step title="Test complete system">
+    1. Power on Arduino (via USB)
+    2. Run Raspberry Pi bridge:
+       ```bash
+       python3 mqtt-arduino.py
+       ```
+    3. Monitor MQTT messages:
+       ```bash
+       mosquitto_sub -h localhost -p 18083 -t "sensores/#" -v
+       ```
+  </Step>
+</Steps>
+
+## Safety & Best Practices
+
+### Electrical Safety
+
+<Warning>
+**Water and Electronics**:
+- Keep Arduino and Raspberry Pi away from water
+- Only DS18B20 and TDS probes should contact water
+- Use waterproof enclosures for long-term deployment
+- Ensure all connections are secure and insulated
+</Warning>
+
+### Cable Management
+
+- Use appropriate wire gauge (22-24 AWG for sensors)
+- Keep sensor wires under 1 meter when possible
+- Label all connections for easy maintenance
+- Use different colored wires:
+  - Red: 5V/VCC
+  - Black: GND
+  - Yellow/Green: Signal/Data
+
+### Grounding
+
+- **Critical**: Connect all GND pins to common ground
+- Arduino and sensors must share the same GND reference
+- If using external power supply, connect GND to Arduino GND
+
+### Mounting
+
+- Mount Arduino in dry, ventilated enclosure
+- Position DHT11 away from heat sources
+- Mount HC-SR04 perpendicular to water surface
+- Secure TDS and DS18B20 probes in water flow area
+- Position LDR in representative location for plant light
+
+## Troubleshooting
+
+### No Serial Data from Arduino
+
+1. Check USB connection: `ls /dev/ttyACM*`
+2. Verify baud rate: 9600 in both Arduino and Python
+3. Test with Arduino Serial Monitor first
+4. Check serial permissions: `sudo chmod 666 /dev/ttyACM0`
+
+### Sensor Reading Errors
+
+**DHT11 returns NaN**:
+- Check power connection
+- Verify pin connection to Digital 2
+- Add/check 10kΩ pull-up resistor
+
+**DS18B20 returns -127°C**:
+- Add 4.7kΩ pull-up resistor (most common issue)
+- Check OneWire connection to Pin 10
+- Verify sensor is not damaged
+
+**TDS reads 0 or very high**:
+- Ensure probe is fully submerged
+- Clean probe contacts
+- Calibrate sensor
+- Check connection to A4
+
+**HC-SR04 returns 0 or timeout**:
+- Verify Trigger on Pin 6, Echo on Pin 4
+- Check if sensor is within range (2-400cm)
+- Ensure no angled or sound-absorbing surfaces nearby
+
+**LDR returns constant value**:
+- Check voltage divider circuit
+- Verify 10kΩ resistor value
+- Test in different lighting conditions
+- Check connection to A0
+
+### Power Issues
+
+- **Brownout/Reset**: Use external 5V supply for sensors
+- **Unstable readings**: Add 100µF capacitor across 5V and GND
+- **USB not detected**: Try different USB cable or port
+
+## Reference Diagrams
+
+For visual wiring diagrams, refer to:
+- Arduino Uno pinout: https://docs.arduino.cc/hardware/uno-rev3
+- Individual sensor datasheets for specific wiring
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Arduino Sensors" icon="microchip" href="/hardware/arduino-sensors">
+    Configure Arduino sensor code
+  </Card>
+  <Card title="Raspberry Pi Bridge" icon="server" href="/hardware/raspberry-pi-bridge">
+    Set up MQTT bridge software
+  </Card>
+</CardGroup>

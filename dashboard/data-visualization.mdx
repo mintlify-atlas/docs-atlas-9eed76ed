@@ -1,0 +1,332 @@
+---
+title: 'Data Visualization'
+description: 'Understanding data visualization and analysis capabilities in the Aqua-IoT dashboard'
+---
+
+## Overview
+
+The Aqua-IoT dashboard provides comprehensive data visualization capabilities for analyzing sensor readings over time. By leveraging Django's ORM and template system, the platform delivers real-time insights into environmental conditions across your monitoring systems.
+
+## Data Retrieval Architecture
+
+All visualization data is retrieved through Django's ORM, ensuring efficient database queries:
+
+```python
+# Data retrieval pattern used across all views
+# Example from sensores/views.py:60
+def temperaturaAquario(request):
+  temperatura = TemperaturaAquario.objects.all()    
+  temperaturas = {'temperaturas': temperatura}  
+  return render(request, "temp-aquario.html", temperaturas)
+```
+
+<Info>
+  Each view function queries all records for its sensor type using `objects.all()`, providing complete historical data for visualization.
+</Info>
+
+## Multi-Sensor Dashboard
+
+The main dashboard aggregates data from all six sensor types into a unified visualization interface:
+
+```python
+# Multi-sensor data aggregation from sensores/views.py:13
+def home(request):
+  if request.user.is_authenticated:
+    # Temperatura Plantas
+    temperaturap = TemperaturaPlantas.objects.all()  
+    # Nivel Agua 
+    nivel = NivelAgua.objects.all()   
+    # Umidade
+    umidade = Umidade.objects.all() 
+    # TDS
+    tds = Tds.objects.all()  
+    # Temperatura Aquario 
+    temperaturaa = TemperaturaAquario.objects.all() 
+    # LDR
+    ldr = Ldr.objects.all()  
+    # Dados  
+    context = {
+              'temperaturas': temperaturap,
+              'nivels': nivel,
+              'umidades': umidade,
+              'tdss': tds,
+              'temperaturaas': temperaturaa,
+              'ldrs': ldr,
+       }
+    return render(request, "index.html", context)
+```
+
+### Data Context Structure
+
+The dashboard passes six data collections to the template:
+
+<CardGroup cols={2}>
+  <Card title="temperaturas" icon="temperature-half">
+    Plant temperature sensor readings (TemperaturaPlantas)
+  </Card>
+  <Card title="temperaturaas" icon="water">
+    Aquarium temperature sensor readings (TemperaturaAquario)
+  </Card>
+  <Card title="umidades" icon="droplet">
+    Humidity sensor readings (Umidade)
+  </Card>
+  <Card title="nivels" icon="arrows-up-down">
+    Water level sensor readings (NivelAgua)
+  </Card>
+  <Card title="ldrs" icon="sun">
+    Light sensor readings with luminosity data (Ldr)
+  </Card>
+  <Card title="tdss" icon="flask">
+    Water quality sensor readings (Tds)
+  </Card>
+</CardGroup>
+
+## Sensor-Specific Visualizations
+
+Each sensor type has a dedicated view for detailed data analysis:
+
+### Temperature Visualization (Plants)
+
+```python
+# Plant temperature view from sensores/views.py:77
+def temperaturaPlantas(request):
+  temperatura = TemperaturaPlantas.objects.all()    
+  temperaturas = {'temperaturas': temperatura}  
+  return render(request, "temp-plantas.html", temperaturas)
+```
+
+**Data Fields Available:**
+- `temperatura`: Current temperature reading
+- `unidade_medida`: Measurement unit (degrees)
+- `nome`: Sensor name
+- `tipo`: Sensor type
+- `grupo`: Sensor grouping
+- `data_criacao`: Timestamp
+
+### Temperature Visualization (Aquarium)
+
+```python
+# Aquarium temperature view from sensores/views.py:59
+def temperaturaAquario(request):
+  temperatura = TemperaturaAquario.objects.all()    
+  temperaturas = {'temperaturas': temperatura}  
+  return render(request, "temp-aquario.html", temperaturas)
+```
+
+**Use Cases:**
+- Track water temperature trends for aquatic health
+- Identify temperature fluctuations that may stress fish
+- Monitor heating/cooling system performance
+
+### Humidity Visualization
+
+```python
+# Humidity view from sensores/views.py:65
+def umidade(request):
+  umidade = Umidade.objects.all()    
+  umidades = {'umidades': umidade}  
+  return render(request, "umidade.html", umidades)
+```
+
+**Data Fields Available:**
+- `umidade`: Humidity percentage reading
+- `unidade_medida`: Measurement unit (percentage)
+- Common sensor attributes
+
+**Analysis Capabilities:**
+- Monitor humidity levels for optimal plant growth
+- Detect dry or overly humid conditions
+- Track seasonal humidity variations
+
+### Water Level Visualization
+
+```python
+# Water level view from sensores/views.py:71
+def nivelAgua(request):
+  nivel = NivelAgua.objects.all()    
+  nivels = {'nivels': nivel}  
+  return render(request, "nivel.html", nivels)
+```
+
+**Data Fields Available:**
+- `nivel`: Current water level in centimeters
+- `nivel_minimo`: Minimum threshold level (200cm default)
+- `unidade_medida`: Measurement unit (centimeters)
+
+**Advanced Features:**
+- Compare current level against minimum threshold
+- Visualize depletion rates over time
+- Alert on low water conditions
+
+<Warning>
+  Water level readings below `nivel_minimo` should trigger immediate attention to prevent system failures.
+</Warning>
+
+### Light Intensity Visualization
+
+```python
+# Light sensor view from sensores/views.py:83
+def ldr(request):
+  ldr = Ldr.objects.all()    
+  ldrs = {'ldrs': ldr}  
+  return render(request, "ldr.html", ldrs)
+```
+
+**Data Fields Available:**
+- `luminosidade`: Current light intensity in lumens
+- `media_luminosidade`: Average light intensity (30 lumens default)
+- `unidade_medida`: Measurement unit (lumens)
+
+**Visualization Insights:**
+- Track daily light cycles and photoperiods
+- Compare readings against average baseline
+- Optimize artificial lighting schedules
+
+### Water Quality Visualization (TDS)
+
+```python
+# TDS sensor view from sensores/views.py:89
+def tds(request):
+  tds = Tds.objects.all()    
+  tdss = {'tdss': tds}  
+  return render(request, "tds.html", tdss)
+```
+
+**Data Fields Available:**
+- `tds`: Current TDS reading in ppm
+- `media_tds`: Average TDS reading (30 ppm default)
+- `unidade_medida`: Measurement unit (ppm)
+
+**Analysis Applications:**
+- Monitor nutrient solution concentration
+- Track water quality degradation over time
+- Compare against optimal TDS ranges for specific crops
+
+## Data Model Structure
+
+All sensor data inherits from the base Sensor model:
+
+```python
+# Base sensor model from sensores/models.py:5
+class Sensor(models.Model):
+  nome = models.CharField(max_length=50)
+  tipo = models.CharField(max_length=50)
+  grupo = models.CharField(max_length=50)  
+  data_criacao = models.DateTimeField(auto_now_add=True)
+  class Meta:
+    abstract = True
+```
+
+### Timestamp-Based Analysis
+
+Every sensor reading includes a `data_criacao` timestamp, enabling:
+
+<CardGroup cols={2}>
+  <Card title="Time-Series Analysis" icon="chart-line">
+    Plot sensor readings over time to identify trends and patterns
+  </Card>
+  <Card title="Historical Comparison" icon="clock-rotate-left">
+    Compare current readings with historical data
+  </Card>
+  <Card title="Rate of Change" icon="arrow-trend-up">
+    Calculate how quickly conditions are changing
+  </Card>
+  <Card title="Event Correlation" icon="link">
+    Correlate sensor events across different monitoring points
+  </Card>
+</CardGroup>
+
+## Visualization Workflow
+
+<Steps>
+  <Step title="Access Dashboard">
+    Navigate to the main dashboard (`/`) to see all sensor data at a glance
+  </Step>
+  <Step title="Select Sensor Type">
+    Choose a specific sensor category for detailed visualization
+  </Step>
+  <Step title="Analyze Data">
+    Review current readings, compare with averages/thresholds, and identify trends
+  </Step>
+  <Step title="Cross-Reference Sensors">
+    Return to main dashboard to compare readings across different sensor types
+  </Step>
+  <Step title="Take Action">
+    Use insights to adjust environmental controls or sensor configurations
+  </Step>
+</Steps>
+
+## Advanced Analysis Features
+
+### Threshold Monitoring
+
+Sensors with threshold fields enable automated monitoring:
+
+<AccordionGroup>
+  <Accordion title="Water Level Thresholds">
+    The `nivel_minimo` field in NivelAgua allows visualization of whether current levels are above or below critical thresholds. Default minimum is 200cm.
+  </Accordion>
+  
+  <Accordion title="Light Intensity Averages">
+    The `media_luminosidade` field in Ldr sensors provides a baseline for comparing current readings. Default average is 30 lumens.
+  </Accordion>
+  
+  <Accordion title="TDS Quality Ranges">
+    The `media_tds` field in TDS sensors helps visualize whether water quality is within acceptable parameters. Default average is 30 ppm.
+  </Accordion>
+</AccordionGroup>
+
+### Sensor Grouping
+
+The `grupo` field enables organized visualization by location or system:
+
+- Group sensors by physical location ("greenhouse-1", "tank-a")
+- Organize by crop type or growing zone
+- Separate production and experimental areas
+
+## Data Export Capabilities
+
+All sensor data is accessible through both web views and REST API:
+
+```python
+# API router configuration from sensores/urls.py:5
+router = routers.DefaultRouter()
+router.register('temperatura-aquario', views.TemperaturaAquarioViewset, basename='temperatura-aquario')
+router.register('umidade', views.UmidadeViewset, basename='umidade')
+router.register('nivel', views.NivelAguaViewset, basename='nivel')
+router.register('temperatura-plantas', views.TemperaturaPlantasViewset, basename='temperatura-plantas')
+router.register('ldr', views.LdrViewset, basename='ldr')
+router.register('tds', views.TdsViewset, basename='tds')
+```
+
+<Info>
+  Access sensor data programmatically through the REST API at `/api/` endpoints for custom visualization tools or data export.
+</Info>
+
+## Visualization Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Regular Review" icon="calendar-check">
+    Check visualizations daily to catch anomalies early
+  </Card>
+  <Card title="Trend Analysis" icon="chart-line">
+    Focus on trends over time rather than individual readings
+  </Card>
+  <Card title="Cross-Sensor Correlation" icon="diagram-project">
+    Compare multiple sensor types to understand system interactions
+  </Card>
+  <Card title="Baseline Establishment" icon="ruler">
+    Use average fields to establish normal operating ranges
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="API Reference" icon="code" href="/api/overview">
+    Learn how to access sensor data programmatically for custom visualizations
+  </Card>
+  <Card title="Dashboard Overview" icon="gauge" href="/dashboard/overview">
+    Return to dashboard overview for comprehensive feature guide
+  </Card>
+</CardGroup>

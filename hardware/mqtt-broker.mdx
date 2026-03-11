@@ -1,0 +1,423 @@
+---
+title: 'MQTT Broker Configuration'
+description: 'Set up and configure Mosquitto MQTT broker for sensor data routing'
+icon: 'message'
+---
+
+## Overview
+
+The MQTT broker acts as the central message hub for the Aqua-IoT system. It receives sensor data from the Raspberry Pi bridge and distributes it to the Django backend for processing and storage.
+
+## Architecture Flow
+
+```mermaid
+graph TD
+    A[Arduino] -->|Serial| B[Raspberry Pi Bridge]
+    B -->|Publish| C[MQTT Broker Port 18083]
+    C -->|Subscribe| D[Django MQTT Client]
+    D -->|HTTP POST| E[Django REST API]
+    E -->|Store| F[Database]
+```
+
+## Broker Configuration
+
+Based on the source code analysis:
+
+### Connection Details
+
+- **Broker Host**: `localhost` (or LAN IP for remote connections)
+- **Port**: `18083`
+- **Protocol**: MQTT
+- **Client IDs**: 
+  - `aqua` - Raspberry Pi publisher
+  - `aqua2` - Django subscriber
+
+<Note>
+Port 18083 is non-standard. Default MQTT ports are 1883 (unencrypted) and 8883 (TLS). Ensure firewall rules allow traffic on port 18083.
+</Note>
+
+## Installing Mosquitto
+
+<Steps>
+  <Step title="Install Mosquitto broker">
+    On Raspberry Pi or Linux server:
+    
+    ```bash
+    sudo apt-get update
+    sudo apt-get install mosquitto mosquitto-clients
+    ```
+    
+    On macOS:
+    ```bash
+    brew install mosquitto
+    ```
+  </Step>
+
+  <Step title="Enable and start service">
+    ```bash
+    sudo systemctl enable mosquitto
+    sudo systemctl start mosquitto
+    ```
+  </Step>
+
+  <Step title="Verify installation">
+    ```bash
+    sudo systemctl status mosquitto
+    ```
+    
+    Expected output:
+    ```
+    ● mosquitto.service - Mosquitto MQTT Broker
+       Loaded: loaded (/lib/systemd/system/mosquitto.service; enabled)
+       Active: active (running)
+    ```
+  </Step>
+</Steps>
+
+## Mosquitto Configuration
+
+### Configure Custom Port
+
+Edit the Mosquitto configuration file:
+
+```bash
+sudo nano /etc/mosquitto/mosquitto.conf
+```
+
+Add or modify:
+
+```conf
+# Default listener
+listener 18083
+
+# Allow anonymous connections (development only)
+allow_anonymous true
+
+# Persistence
+persistence true
+persistence_location /var/lib/mosquitto/
+
+# Logging
+log_dest file /var/log/mosquitto/mosquitto.log
+log_dest stdout
+log_type all
+
+# Connection settings
+max_connections -1
+max_queued_messages 1000
+```
+
+<Warning>
+`allow_anonymous true` is suitable for development. For production, implement authentication.
+</Warning>
+
+Restart Mosquitto after changes:
+
+```bash
+sudo systemctl restart mosquitto
+```
+
+## MQTT Topics Structure
+
+The system uses a hierarchical topic structure:
+
+### Publisher Topics (Raspberry Pi → Broker)
+
+Source: `mqtt-arduino.py:13-19`
+
+```
+sensores/
+├── temperatura           # Plant temperature (DHT11)
+├── umidade              # Plant humidity (DHT11)
+├── ldr                  # Light intensity (LDR)
+├── tds                  # Water quality (Gravity TDS)
+├── temperatura-agua     # Water temperature (DS18B20)
+└── nivel                # Water level (HC-SR04)
+```
+
+### Subscriber Configuration (Django)
+
+Source: `mqtt-django.py:13-19`
+
+```python
+# MQTT Topics
+topic_temp = "sensores/temperatura-plantas"
+topic_hum = "sensores/umidade"
+topic_ldr = "sensores/ldr"
+topic_tds = "sensores/tds"
+topic_temp_agua = "sensores/temperatura-agua"
+topic_nivel = "sensores/nivel"
+```
+
+<Note>
+Notice the discrepancy: publisher uses `sensores/temperatura` while subscriber uses `sensores/temperatura-plantas`. Ensure topic names match or use wildcards.
+</Note>
+
+## Django MQTT Subscriber
+
+The Django backend subscribes to MQTT topics and forwards data to the REST API.
+
+### Subscriber Configuration
+
+Source: `~/workspace/source/Raspberry-pi/mqtt-django.py:6-11`
+
+```python
+import paho.mqtt.client as mqtt 
+import requests
+import json
+
+# Broker MQTT Mosquito
+broker = 'localhost'
+port = 18083
+client_id = 'aqua2'
+# username = '*****'
+# password = '*****'
+```
+
+### Message Handling
+
+The subscriber processes messages and posts to Django API:
+
+```python
+def on_message(client, userdata, message): 
+    # Temperature - Plants
+    if message.topic == topic_temp:
+        nome = "Temperatura"
+        tipo = "Plantas"
+        grupo = "Grupo P"
+        temperatura = str(message.payload.decode("utf-8"))
+        unidade_medida = "graus"
+        
+        temperatura_plantas = {
+            'nome': nome,
+            'tipo': tipo,
+            'grupo': grupo,
+            'temperatura': temperatura,
+            'unidade_medida': unidade_medida
+        }
+        
+        headers = {'Authorization': 'Token 2d75140c068049278f9cb7d39b1a20f05aecdc56'}
+        url = "http://127.0.0.1:8000/api/temperatura-plantas/"
+        response = requests.post(url, headers=headers, json=temperatura_plantas)
+        print(response)
+        print("Temperatura Plantas enviado com suceso")
+```
+
+### API Endpoints Mapping
+
+| MQTT Topic | API Endpoint | Sensor Type |
+|------------|--------------|-------------|
+| `sensores/temperatura-plantas` | `/api/temperatura-plantas/` | Plant temperature |
+| `sensores/umidade` | `/api/umidade/` | Humidity |
+| `sensores/ldr` | `/api/ldr/` | Light intensity |
+| `sensores/tds` | `/api/tds/` | Water quality |
+| `sensores/temperatura-agua` | `/api/temperatura-aquario/` | Water temperature |
+| `sensores/nivel` | `/api/nivel/` | Water level |
+
+<Warning>
+The API token in the source code (`2d75140c068049278f9cb7d39b1a20f05aecdc56`) should be replaced with environment variables in production.
+</Warning>
+
+## Testing MQTT Broker
+
+### Test Publishing
+
+Publish test message to broker:
+
+```bash
+mosquitto_pub -h localhost -p 18083 -t "sensores/temperatura" -m "25.5"
+```
+
+### Test Subscribing
+
+Subscribe to all sensor topics:
+
+```bash
+mosquitto_sub -h localhost -p 18083 -t "sensores/#" -v
+```
+
+Output:
+```
+sensores/temperatura 24.50
+sensores/umidade 65.00
+sensores/ldr 30
+sensores/tds 450
+sensores/temperatura-agua 23.50
+sensores/nivel 12.5
+```
+
+### Monitor Specific Topics
+
+```bash
+# Temperature only
+mosquitto_sub -h localhost -p 18083 -t "sensores/temperatura" -v
+
+# Water sensors only
+mosquitto_sub -h localhost -p 18083 -t "sensores/temperatura-agua" -t "sensores/nivel" -v
+```
+
+## Connection Callbacks
+
+### Publisher Connection
+
+Source: `mqtt-arduino.py:22-24`
+
+```python
+def on_connect(client, userdata, flags, rc):
+   if rc == 0:
+     print("Conetado ao broker")
+```
+
+### Subscriber Connection
+
+Source: `mqtt-django.py:105-113`
+
+```python
+def on_connect(client, userdata, flags, rc):     
+    if rc == 0:
+        print("Conetado ao broker")
+        client.subscribe(topic_temp)
+        client.subscribe(topic_hum)
+        client.subscribe(topic_ldr)
+        client.subscribe(topic_tds)
+        client.subscribe(topic_temp_agua)
+        client.subscribe(topic_nivel)
+```
+
+## Running Django Subscriber
+
+<Steps>
+  <Step title="Start Django server">
+    Ensure Django REST API is running:
+    
+    ```bash
+    cd ~/workspace/source/Django
+    python manage.py runserver
+    ```
+  </Step>
+
+  <Step title="Run MQTT subscriber">
+    In a separate terminal:
+    
+    ```bash
+    cd ~/workspace/source/Raspberry-pi
+    python3 mqtt-django.py
+    ```
+    
+    Expected output:
+    ```
+    Conetado ao broker
+    Cliente assinado a sensores/temperatura-plantas
+    Cliente assinado a sensores/umidade
+    ```
+  </Step>
+
+  <Step title="Verify data flow">
+    When sensor data is published, you should see:
+    
+    ```
+    <Response [201]>
+    Temperatura Plantas enviado com suceso
+    <Response [201]>
+    Umidade enviado com suceso
+    ...
+    ```
+  </Step>
+</Steps>
+
+## Security Considerations
+
+### Enable Authentication
+
+For production, enable password authentication:
+
+```bash
+# Create password file
+sudo mosquitto_passwd -c /etc/mosquitto/passwd aqua_user
+
+# Update mosquitto.conf
+sudo nano /etc/mosquitto/mosquitto.conf
+```
+
+Add:
+```conf
+allow_anonymous false
+password_file /etc/mosquitto/passwd
+```
+
+Update Python clients:
+
+```python
+username = 'aqua_user'
+password = 'your_secure_password'
+
+client.username_pw_set(username, password)
+client.connect(broker, port)
+```
+
+### Enable TLS/SSL
+
+For encrypted connections:
+
+```conf
+listener 8883
+certfile /etc/mosquitto/certs/server.crt
+keyfile /etc/mosquitto/certs/server.key
+cafile /etc/mosquitto/certs/ca.crt
+```
+
+## Troubleshooting
+
+### Broker Not Starting
+
+Check logs:
+```bash
+sudo journalctl -u mosquitto -n 50
+sudo tail -f /var/log/mosquitto/mosquitto.log
+```
+
+### Connection Refused
+
+Verify port is listening:
+```bash
+sudo netstat -tulpn | grep 18083
+```
+
+Expected:
+```
+tcp  0  0 0.0.0.0:18083  0.0.0.0:*  LISTEN  1234/mosquitto
+```
+
+### Messages Not Received
+
+Check topic subscriptions:
+```bash
+# Subscribe with wildcard
+mosquitto_sub -h localhost -p 18083 -t "#" -v
+```
+
+Verify client connection:
+```bash
+# In mosquitto.log
+New connection from 127.0.0.1 on port 18083.
+New client connected from 127.0.0.1 as aqua
+```
+
+### API Posting Fails
+
+Check Django logs and verify:
+- Django server is running on `http://127.0.0.1:8000`
+- API token is valid
+- API endpoints exist
+- Request payload matches serializer schema
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Raspberry Pi Bridge" icon="server" href="/hardware/raspberry-pi-bridge">
+    Configure the MQTT publisher
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/overview">
+    View Django REST API endpoints
+  </Card>
+</CardGroup>

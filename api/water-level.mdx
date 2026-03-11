@@ -1,0 +1,299 @@
+---
+title: 'Water Level API'
+description: 'Submit water level readings from aquarium sensors'
+---
+
+## Overview
+
+The Water Level endpoint allows you to submit water level readings from sensors monitoring aquarium water levels. This endpoint tracks water depth and helps maintain optimal water levels.
+
+## Endpoint
+
+```
+POST /api/nivel/
+```
+
+## Model Structure
+
+The `NivelAgua` model extends the base `Sensor` model:
+
+```python
+class NivelAgua(Sensor):
+    nivel = models.FloatField(max_length=200, default='00')
+    nivel_minimo = models.FloatField(max_length=200, default='200')
+    unidade_medida = models.CharField(max_length=50, default='centímetros')
+```
+
+Source: `models.py:31-36`
+
+## ViewSet Implementation
+
+```python
+class NivelAguaViewset(viewsets.ViewSet):
+    permission_classes = (IsAuthenticated,)
+    
+    def create(self, request):
+        serializer = NivelAguaSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        the_response = NivelAguaSerializer(serializer.save())
+        return Response(the_response.data, status=status.HTTP_201_CREATED)
+```
+
+Source: `views.py:115-121`
+
+## Authentication
+
+<Warning>
+This endpoint requires authentication. Include your API token in the Authorization header.
+</Warning>
+
+```
+Authorization: Token 2d75140c068049278f9cb7d39b1a20f05aecdc56
+```
+
+See [Authentication](/api/authentication) for details.
+
+## Request Parameters
+
+<ParamField body="nome" type="string" required>
+  Sensor name identifier
+  
+  **Example:** `"Nível de Água"`
+</ParamField>
+
+<ParamField body="tipo" type="string" required>
+  Type of sensor location
+  
+  **Example:** `"Acuario"`
+</ParamField>
+
+<ParamField body="grupo" type="string" required>
+  Sensor group classification
+  
+  **Example:** `"Grupo A"`
+</ParamField>
+
+<ParamField body="nivel" type="float" required>
+  Current water level reading from the sensor
+  
+  **Example:** `45.5`
+</ParamField>
+
+<ParamField body="nivel_minimo" type="float" required>
+  Minimum acceptable water level threshold
+  
+  **Default:** `200`
+  
+  **Example:** `30`
+</ParamField>
+
+<ParamField body="unidade_medida" type="string" required>
+  Unit of measurement for water level
+  
+  **Default:** `"centímetros"`
+  
+  **Example:** `"centímetros"`
+</ParamField>
+
+## Response Fields
+
+<ResponseField name="id" type="integer">
+  Auto-generated unique identifier for the record
+</ResponseField>
+
+<ResponseField name="nome" type="string">
+  Sensor name as provided in request
+</ResponseField>
+
+<ResponseField name="tipo" type="string">
+  Sensor type as provided in request
+</ResponseField>
+
+<ResponseField name="grupo" type="string">
+  Sensor group as provided in request
+</ResponseField>
+
+<ResponseField name="nivel" type="float">
+  Current water level value submitted
+</ResponseField>
+
+<ResponseField name="nivel_minimo" type="float">
+  Minimum water level threshold
+</ResponseField>
+
+<ResponseField name="unidade_medida" type="string">
+  Unit of measurement for the water level
+</ResponseField>
+
+<ResponseField name="data_criacao" type="datetime">
+  Timestamp when the record was created (auto-generated)
+</ResponseField>
+
+## Example Request
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/nivel/ \
+  -H "Authorization: Token 2d75140c068049278f9cb7d39b1a20f05aecdc56" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "nome": "Nível de Água",
+    "tipo": "Acuario",
+    "grupo": "Grupo A",
+    "nivel": "45.5",
+    "nivel_minimo": 30,
+    "unidade_medida": "centímetros"
+  }'
+```
+
+## Example Response
+
+**Status Code:** `201 Created`
+
+```json
+{
+  "id": 67,
+  "nome": "Nível de Água",
+  "tipo": "Acuario",
+  "grupo": "Grupo A",
+  "nivel": 45.5,
+  "nivel_minimo": 30.0,
+  "unidade_medida": "centímetros",
+  "data_criacao": "2026-03-11T10:30:45.123456Z"
+}
+```
+
+## Error Responses
+
+### Missing Authentication Token
+
+**Status Code:** `401 Unauthorized`
+
+```json
+{
+  "detail": "Authentication credentials were not provided."
+}
+```
+
+### Invalid Token
+
+**Status Code:** `401 Unauthorized`
+
+```json
+{
+  "detail": "Invalid token."
+}
+```
+
+### Missing Required Fields
+
+**Status Code:** `400 Bad Request`
+
+```json
+{
+  "nivel": [
+    "This field is required."
+  ],
+  "nome": [
+    "This field is required."
+  ]
+}
+```
+
+### Invalid Data Type
+
+**Status Code:** `400 Bad Request`
+
+```json
+{
+  "nivel": [
+    "A valid number is required."
+  ],
+  "nivel_minimo": [
+    "A valid number is required."
+  ]
+}
+```
+
+## MQTT Integration Example
+
+Example from the Raspberry Pi MQTT client:
+
+```python
+# From mqtt-django.py:90-102
+if message.topic == topic_nivel:
+    nome = "Nível de Água"
+    tipo = "Acuario"
+    grupo = "Grupo A"
+    nivel = str(message.payload.decode("utf-8"))
+    nivel_minimo = 30
+    unidade_medida = "centímetros"
+    
+    nivel = {
+        'nome': nome,
+        'tipo': tipo,
+        'grupo': grupo,
+        'nivel': nivel,
+        'nivel_minimo': nivel_minimo,
+        'unidade_medida': unidade_medida
+    }
+    
+    headers = {'Authorization': 'Token 2d75140c068049278f9cb7d39b1a20f05aecdc56'}
+    url_nivel = "http://127.0.0.1:8000/api/nivel/"
+    send_nivel = requests.post(
+        url_nivel,
+        headers=headers,
+        json=nivel
+    )
+```
+
+## Serializer Details
+
+The endpoint uses `NivelAguaSerializer` with `depth=1` to include related object details:
+
+```python
+class NivelAguaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = NivelAgua
+        fields = '__all__'
+        depth = 1
+
+    def create(self, validated_data):
+        nivel = NivelAgua.objects.create(**validated_data)
+        nivel.save()
+        return nivel
+```
+
+Source: `serializers.py:29-38`
+
+## Use Cases
+
+- Monitor aquarium water level in real-time
+- Track water evaporation rates over time
+- Trigger alerts when water level drops below minimum threshold
+- Automate water refill systems
+- Prevent pump damage from low water levels
+- Historical water level data analysis
+- IoT device integration via MQTT
+
+## Water Level Monitoring Best Practices
+
+1. **Set Appropriate Thresholds**: Configure `nivel_minimo` based on your aquarium requirements
+2. **Regular Readings**: Submit readings at consistent intervals (e.g., every 10-15 minutes)
+3. **Calibration**: Regularly calibrate sensors for accuracy
+4. **Alert Systems**: Implement alerts when level drops below `nivel_minimo`
+5. **Evaporation Compensation**: Account for normal evaporation rates in your monitoring
+
+## Safety Considerations
+
+<Warning>
+  - Maintain water level above minimum to protect pumps and filters
+  - Low water levels can stress aquatic life
+  - Sudden drops may indicate leaks requiring immediate attention
+  - Ensure sensors are waterproof and properly sealed
+</Warning>
+
+## Related Endpoints
+
+- [Temperature Aquarium API](/api/temperature-aquarium) - For aquarium water temperature
+- [TDS Sensor API](/api/tds-sensor) - For water quality monitoring
+- [Humidity API](/api/humidity) - For monitoring environmental humidity

@@ -1,0 +1,549 @@
+---
+title: 'Production Deployment'
+description: 'Deploy Aqua-IoT to a production environment with best practices for security and performance'
+---
+
+## Overview
+
+This guide covers deploying Aqua-IoT to a production environment. We'll use industry-standard tools and practices to ensure a secure, performant, and reliable deployment.
+
+<Warning>
+**Important**: Never deploy the application with default settings. Always configure security settings, use environment variables for secrets, and disable debug mode.
+</Warning>
+
+## Production Architecture
+
+A typical production deployment includes:
+
+- **Web Server**: Nginx or Apache for serving static files and reverse proxy
+- **Application Server**: Gunicorn or uWSGI for running Django
+- **Database**: PostgreSQL for data persistence
+- **MQTT Broker**: Mosquitto or HiveMQ for IoT communication
+- **Process Manager**: Systemd or Supervisor for service management
+
+## Prerequisites
+
+Before deploying to production:
+
+- A server running Linux (Ubuntu 20.04+ or similar)
+- Root or sudo access
+- Domain name (optional but recommended)
+- SSL certificate (Let's Encrypt recommended)
+
+## Production Setup Steps
+
+<Steps>
+  <Step title="Prepare the Server">
+    Update system packages and install dependencies:
+
+    ```bash
+    # Update package list
+    sudo apt update && sudo apt upgrade -y
+
+    # Install required packages
+    sudo apt install -y python3-pip python3-venv postgresql nginx supervisor
+    ```
+  </Step>
+
+  <Step title="Configure PostgreSQL">
+    Set up the production database:
+
+    ```bash
+    # Switch to postgres user
+    sudo -u postgres psql
+    ```
+
+    In the PostgreSQL shell:
+    ```sql
+    -- Create database
+    CREATE DATABASE aqua_production;
+
+    -- Create user with strong password
+    CREATE USER aqua_user WITH PASSWORD 'your_secure_password_here';
+
+    -- Grant privileges
+    GRANT ALL PRIVILEGES ON DATABASE aqua_production TO aqua_user;
+
+    -- Exit
+    \q
+    ```
+  </Step>
+
+  <Step title="Deploy Application Code">
+    Clone and set up the application:
+
+    ```bash
+    # Create application directory
+    sudo mkdir -p /var/www/aqua-iot
+    sudo chown $USER:$USER /var/www/aqua-iot
+
+    # Clone repository
+    cd /var/www/aqua-iot
+    git clone https://github.com/barrancocarlos/Aqua-IoT.git .
+
+    # Navigate to Django directory
+    cd Django
+
+    # Set up virtual environment
+    python3 -m venv venv
+    source venv/bin/activate
+
+    # Install dependencies
+    pip install --upgrade pip
+    pip install django djangorestframework psycopg2-binary gunicorn
+    ```
+  </Step>
+
+  <Step title="Configure Environment Variables">
+    Create a secure environment configuration:
+
+    ```bash
+    # Create .env file
+    nano /var/www/aqua-iot/Django/.env
+    ```
+
+    Add the following variables:
+    ```bash .env
+    DJANGO_SECRET_KEY=your-generated-secret-key
+    DJANGO_DEBUG=False
+    DJANGO_ALLOWED_HOSTS=yourdomain.com,www.yourdomain.com,server-ip
+    DB_NAME=aqua_production
+    DB_USER=aqua_user
+    DB_PASSWORD=your_secure_password_here
+    DB_HOST=localhost
+    DB_PORT=5432
+    MQTT_BROKER_HOST=localhost
+    MQTT_BROKER_PORT=1883
+    ```
+
+    Generate a secure secret key:
+    ```python
+    python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
+    ```
+  </Step>
+
+  <Step title="Update Django Settings">
+    Modify `settings.py` to use environment variables:
+
+    ```python Django/painel/settings.py
+    import os
+    from pathlib import Path
+
+    # Load environment variables
+    DEBUG = os.environ.get('DJANGO_DEBUG', 'False') == 'True'
+    SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
+    ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', '').split(',')
+
+    # Database configuration
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql_psycopg2',
+            'NAME': os.environ.get('DB_NAME'),
+            'USER': os.environ.get('DB_USER'),
+            'PASSWORD': os.environ.get('DB_PASSWORD'),
+            'HOST': os.environ.get('DB_HOST', 'localhost'),
+            'PORT': os.environ.get('DB_PORT', '5432'),
+        }
+    }
+    ```
+  </Step>
+
+  <Step title="Run Database Migrations">
+    Set up the database schema:
+
+    ```bash
+    # Load environment variables
+    export $(cat .env | xargs)
+
+    # Run migrations
+    python manage.py migrate
+
+    # Create superuser
+    python manage.py createsuperuser
+
+    # Collect static files
+    python manage.py collectstatic --noinput
+    ```
+  </Step>
+
+  <Step title="Configure Gunicorn">
+    Set up Gunicorn as the application server:
+
+    ```bash
+    # Create Gunicorn configuration
+    nano /var/www/aqua-iot/Django/gunicorn_config.py
+    ```
+
+    Add the configuration:
+    ```python gunicorn_config.py
+    import multiprocessing
+
+    bind = "127.0.0.1:8000"
+    workers = multiprocessing.cpu_count() * 2 + 1
+    worker_class = "sync"
+    timeout = 120
+    keepalive = 5
+    errorlog = "/var/log/aqua-iot/gunicorn-error.log"
+    accesslog = "/var/log/aqua-iot/gunicorn-access.log"
+    loglevel = "info"
+    ```
+
+    Create log directory:
+    ```bash
+    sudo mkdir -p /var/log/aqua-iot
+    sudo chown $USER:$USER /var/log/aqua-iot
+    ```
+  </Step>
+
+  <Step title="Configure Supervisor">
+    Create a Supervisor configuration to manage the Gunicorn process:
+
+    ```bash
+    sudo nano /etc/supervisor/conf.d/aqua-iot.conf
+    ```
+
+    Add the configuration:
+    ```ini /etc/supervisor/conf.d/aqua-iot.conf
+    [program:aqua-iot]
+    command=/var/www/aqua-iot/Django/venv/bin/gunicorn painel.wsgi:application -c /var/www/aqua-iot/Django/gunicorn_config.py
+    directory=/var/www/aqua-iot/Django
+    user=www-data
+    autostart=true
+    autorestart=true
+    redirect_stderr=true
+    stdout_logfile=/var/log/aqua-iot/supervisor.log
+    environment=PATH="/var/www/aqua-iot/Django/venv/bin",DJANGO_SECRET_KEY="your-secret-key",DJANGO_DEBUG="False",DB_NAME="aqua_production",DB_USER="aqua_user",DB_PASSWORD="your_password",DB_HOST="localhost",DB_PORT="5432"
+    ```
+
+    Start Supervisor:
+    ```bash
+    sudo supervisorctl reread
+    sudo supervisorctl update
+    sudo supervisorctl start aqua-iot
+    ```
+  </Step>
+
+  <Step title="Configure Nginx">
+    Set up Nginx as a reverse proxy:
+
+    ```bash
+    sudo nano /etc/nginx/sites-available/aqua-iot
+    ```
+
+    Add the Nginx configuration:
+    ```nginx /etc/nginx/sites-available/aqua-iot
+    upstream aqua_app {
+        server 127.0.0.1:8000 fail_timeout=0;
+    }
+
+    server {
+        listen 80;
+        server_name yourdomain.com www.yourdomain.com;
+
+        client_max_body_size 4G;
+
+        access_log /var/log/nginx/aqua-iot-access.log;
+        error_log /var/log/nginx/aqua-iot-error.log;
+
+        # Static files
+        location /static/ {
+            alias /var/www/aqua-iot/Django/static_files/;
+            expires 30d;
+            add_header Cache-Control "public, immutable";
+        }
+
+        # Media files
+        location /media/ {
+            alias /var/www/aqua-iot/Django/static_media/;
+        }
+
+        # Proxy to Gunicorn
+        location / {
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header Host $http_host;
+            proxy_redirect off;
+            proxy_pass http://aqua_app;
+        }
+    }
+    ```
+
+    Enable the site:
+    ```bash
+    sudo ln -s /etc/nginx/sites-available/aqua-iot /etc/nginx/sites-enabled/
+    sudo nginx -t
+    sudo systemctl restart nginx
+    ```
+  </Step>
+
+  <Step title="Configure SSL with Let's Encrypt">
+    Secure your site with HTTPS:
+
+    ```bash
+    # Install Certbot
+    sudo apt install certbot python3-certbot-nginx -y
+
+    # Obtain certificate
+    sudo certbot --nginx -d yourdomain.com -d www.yourdomain.com
+
+    # Test auto-renewal
+    sudo certbot renew --dry-run
+    ```
+  </Step>
+
+  <Step title="Configure MQTT Broker">
+    Set up Mosquitto for IoT communication:
+
+    ```bash
+    # Install Mosquitto
+    sudo apt install mosquitto mosquitto-clients -y
+
+    # Configure authentication
+    sudo mosquitto_passwd -c /etc/mosquitto/passwd mqtt_user
+
+    # Edit configuration
+    sudo nano /etc/mosquitto/mosquitto.conf
+    ```
+
+    Add security settings:
+    ```conf /etc/mosquitto/mosquitto.conf
+    allow_anonymous false
+    password_file /etc/mosquitto/passwd
+
+    listener 1883 localhost
+    ```
+
+    Restart Mosquitto:
+    ```bash
+    sudo systemctl restart mosquitto
+    sudo systemctl enable mosquitto
+    ```
+  </Step>
+</Steps>
+
+## Security Hardening
+
+### Firewall Configuration
+
+Configure UFW to allow only necessary ports:
+
+```bash
+# Enable firewall
+sudo ufw enable
+
+# Allow SSH (be careful!)
+sudo ufw allow 22/tcp
+
+# Allow HTTP and HTTPS
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+
+# Check status
+sudo ufw status
+```
+
+### Additional Security Measures
+
+<AccordionGroup>
+  <Accordion title="CSRF Protection">
+    Ensure CSRF middleware is enabled in `settings.py`:
+    ```python
+    MIDDLEWARE = [
+        'django.middleware.csrf.CsrfViewMiddleware',
+        # ... other middleware
+    ]
+    ```
+  </Accordion>
+
+  <Accordion title="Secure Cookies">
+    Add these settings for production:
+    ```python
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_SSL_REDIRECT = True
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    ```
+  </Accordion>
+
+  <Accordion title="Database Backups">
+    Set up automated PostgreSQL backups:
+    ```bash
+    # Create backup script
+    sudo nano /usr/local/bin/backup-aqua-db.sh
+    ```
+
+    Add:
+    ```bash
+    #!/bin/bash
+    DATE=$(date +%Y%m%d_%H%M%S)
+    pg_dump -U aqua_user aqua_production > /backups/aqua_$DATE.sql
+    find /backups -name "aqua_*.sql" -mtime +7 -delete
+    ```
+
+    Make executable and add to cron:
+    ```bash
+    sudo chmod +x /usr/local/bin/backup-aqua-db.sh
+    sudo crontab -e
+    # Add: 0 2 * * * /usr/local/bin/backup-aqua-db.sh
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Monitoring and Maintenance
+
+### Application Logs
+
+Monitor application logs:
+
+```bash
+# Supervisor logs
+sudo tail -f /var/log/aqua-iot/supervisor.log
+
+# Gunicorn error logs
+sudo tail -f /var/log/aqua-iot/gunicorn-error.log
+
+# Nginx logs
+sudo tail -f /var/log/nginx/aqua-iot-error.log
+```
+
+### Service Management
+
+```bash
+# Restart application
+sudo supervisorctl restart aqua-iot
+
+# Restart Nginx
+sudo systemctl restart nginx
+
+# Check service status
+sudo supervisorctl status
+sudo systemctl status nginx
+sudo systemctl status postgresql
+sudo systemctl status mosquitto
+```
+
+### Updating the Application
+
+```bash
+# Navigate to application directory
+cd /var/www/aqua-iot
+
+# Pull latest changes
+git pull origin main
+
+# Activate virtual environment
+cd Django
+source venv/bin/activate
+
+# Install new dependencies
+pip install -r requirements.txt
+
+# Run migrations
+python manage.py migrate
+
+# Collect static files
+python manage.py collectstatic --noinput
+
+# Restart application
+sudo supervisorctl restart aqua-iot
+```
+
+## Performance Optimization
+
+### Database Optimization
+
+```sql
+-- Create indexes for frequently queried fields
+CREATE INDEX idx_sensor_timestamp ON sensor_data(timestamp);
+CREATE INDEX idx_sensor_type ON sensor_data(sensor_type);
+
+-- Vacuum and analyze
+VACUUM ANALYZE;
+```
+
+### Static File Compression
+
+Enable gzip compression in Nginx:
+
+```nginx
+gzip on;
+gzip_vary on;
+gzip_min_length 1024;
+gzip_types text/plain text/css text/xml text/javascript application/x-javascript application/xml+rss application/json;
+```
+
+### Caching
+
+Consider implementing Redis for caching:
+
+```bash
+sudo apt install redis-server -y
+pip install django-redis
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="502 Bad Gateway">
+    Check if Gunicorn is running:
+    ```bash
+    sudo supervisorctl status aqua-iot
+    sudo supervisorctl restart aqua-iot
+    ```
+  </Accordion>
+
+  <Accordion title="Static files not loading">
+    Verify static file permissions:
+    ```bash
+    sudo chown -R www-data:www-data /var/www/aqua-iot/Django/static_files
+    python manage.py collectstatic --noinput
+    ```
+  </Accordion>
+
+  <Accordion title="Database connection errors">
+    Check PostgreSQL status and credentials:
+    ```bash
+    sudo systemctl status postgresql
+    sudo -u postgres psql -c "\du"
+    ```
+  </Accordion>
+
+  <Accordion title="MQTT connection issues">
+    Test MQTT broker:
+    ```bash
+    mosquitto_sub -h localhost -t test/topic -u mqtt_user -P password
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Production Checklist
+
+Before going live:
+
+- [ ] `DEBUG = False` in settings
+- [ ] Secure `SECRET_KEY` set via environment variable
+- [ ] `ALLOWED_HOSTS` properly configured
+- [ ] Database using PostgreSQL (not SQLite)
+- [ ] Static files collected and served by Nginx
+- [ ] SSL certificate installed and auto-renewal configured
+- [ ] Firewall configured (UFW or iptables)
+- [ ] MQTT broker secured with authentication
+- [ ] Database backups automated
+- [ ] Monitoring and logging configured
+- [ ] Process manager (Supervisor) configured
+- [ ] Error pages customized (500, 404)
+- [ ] CSRF and security middleware enabled
+- [ ] Secure cookie settings enabled
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="API Reference" icon="code" href="/api/overview">
+    Explore the REST API endpoints
+  </Card>
+  <Card title="Arduino Integration" icon="microchip" href="/arduino">
+    Connect Arduino sensors to your system
+  </Card>
+</CardGroup>

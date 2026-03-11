@@ -1,0 +1,130 @@
+---
+title: 'API Overview'
+description: 'Overview of the Aqua-IoT REST API for sensor data management'
+---
+
+## Introduction
+
+The Aqua-IoT API provides a RESTful interface for managing IoT sensor data from aquarium and plant monitoring systems. The API enables you to submit sensor readings from various devices including temperature sensors, humidity sensors, water level monitors, light sensors (LDR), and TDS sensors.
+
+## Base URL
+
+```
+http://127.0.0.1:8000/api/
+```
+
+## Architecture
+
+The API is built using Django Rest Framework and follows these principles:
+
+- **RESTful Design**: Standard HTTP methods and status codes
+- **Token Authentication**: Secure API access using Django REST Framework token authentication
+- **JSON Format**: All requests and responses use JSON
+- **ViewSets**: Each sensor type has a dedicated viewset for data operations
+- **Serializers**: Data validation and transformation using DRF serializers
+
+## Available Endpoints
+
+The API provides the following endpoints for sensor data submission:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/temperatura-aquario/` | POST | Submit aquarium temperature readings |
+| `/api/temperatura-plantas/` | POST | Submit plant temperature readings |
+| `/api/umidade/` | POST | Submit humidity readings |
+| `/api/nivel/` | POST | Submit water level readings |
+| `/api/ldr/` | POST | Submit light sensor (LDR) readings |
+| `/api/tds/` | POST | Submit TDS (Total Dissolved Solids) readings |
+
+## Common Request Structure
+
+All sensor endpoints share a common base structure inherited from the `Sensor` model:
+
+<ParamField body="nome" type="string" required>
+  Sensor name or identifier
+</ParamField>
+
+<ParamField body="tipo" type="string" required>
+  Sensor type (e.g., "Plantas", "Acuario")
+</ParamField>
+
+<ParamField body="grupo" type="string" required>
+  Sensor group (e.g., "Grupo P" for plants, "Grupo A" for aquarium)
+</ParamField>
+
+<ParamField body="unidade_medida" type="string" required>
+  Unit of measurement for the sensor reading
+</ParamField>
+
+Additional fields vary by sensor type (see individual endpoint documentation).
+
+## Common Response Structure
+
+Successful responses (HTTP 201) return the created object with all fields including:
+
+<ResponseField name="id" type="integer">
+  Auto-generated unique identifier
+</ResponseField>
+
+<ResponseField name="nome" type="string">
+  Sensor name
+</ResponseField>
+
+<ResponseField name="tipo" type="string">
+  Sensor type
+</ResponseField>
+
+<ResponseField name="grupo" type="string">
+  Sensor group
+</ResponseField>
+
+<ResponseField name="data_criacao" type="datetime">
+  Timestamp when the record was created
+</ResponseField>
+
+<ResponseField name="unidade_medida" type="string">
+  Unit of measurement
+</ResponseField>
+
+## Error Handling
+
+The API uses standard HTTP status codes:
+
+| Status Code | Description |
+|-------------|-------------|
+| 201 | Created - Request successful |
+| 400 | Bad Request - Invalid data |
+| 401 | Unauthorized - Missing or invalid token |
+| 403 | Forbidden - Insufficient permissions |
+| 500 | Internal Server Error |
+
+### Error Response Format
+
+```json
+{
+  "field_name": [
+    "Error message describing the issue"
+  ]
+}
+```
+
+## Rate Limiting
+
+Currently, no rate limiting is enforced. However, it's recommended to implement reasonable request intervals when submitting sensor data.
+
+## Data Models
+
+All sensor models inherit from the abstract `Sensor` base model which provides:
+
+- `nome`: CharField (max 50 characters)
+- `tipo`: CharField (max 50 characters)
+- `grupo`: CharField (max 50 characters)
+- `data_criacao`: DateTimeField (auto-generated)
+
+Each sensor type extends this base with specific measurement fields.
+
+## Next Steps
+
+- Review the [Authentication](/api/authentication) guide to get your API token
+- Explore individual endpoint documentation for detailed request/response examples
+- Check sensor-specific fields and validation rules

@@ -1,0 +1,142 @@
+---
+title: 'Dashboard Overview'
+description: 'Comprehensive overview of the Aqua-IoT web dashboard for monitoring and managing your IoT sensors'
+---
+
+## Introduction
+
+The Aqua-IoT web dashboard is your central hub for monitoring and managing all connected IoT sensors in real-time. Built with Django and Django REST Framework, it provides a powerful interface for tracking environmental conditions across your aquaponics and plant monitoring systems.
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Real-Time Monitoring" icon="chart-line">
+    Track sensor data in real-time across all connected devices with automatic updates
+  </Card>
+  <Card title="Multi-Sensor Support" icon="microchip">
+    Monitor 6 different sensor types: temperature, humidity, water level, light, and water quality
+  </Card>
+  <Card title="Secure Authentication" icon="lock">
+    Enterprise-grade authentication system to protect your sensor data
+  </Card>
+  <Card title="RESTful API" icon="code">
+    Full REST API access for integrating with IoT devices and external systems
+  </Card>
+</CardGroup>
+
+## Dashboard Architecture
+
+The dashboard is built on Django's MVT (Model-View-Template) architecture with REST API capabilities:
+
+```python
+# Main dashboard view from sensores/views.py
+def home(request):
+  if request.user.is_authenticated:
+    # Temperatura Plantas
+    temperaturap = TemperaturaPlantas.objects.all()  
+    # Nivel Agua 
+    nivel = NivelAgua.objects.all()   
+    # Umidade
+    umidade = Umidade.objects.all() 
+    # TDS
+    tds = Tds.objects.all()  
+    # Temperatura Aquario 
+    temperaturaa = TemperaturaAquario.objects.all() 
+    # LDR
+    ldr = Ldr.objects.all()  
+    # Dados  
+    context = {
+              'temperaturas': temperaturap,
+              'nivels': nivel,
+              'umidades': umidade,
+              'tdss': tds,
+              'temperaturaas': temperaturaa,
+              'ldrs': ldr,
+       }
+    return render(request, "index.html", context)
+  else:    
+   return redirect(userLogin)
+```
+
+<Info>
+  The home view at `sensores/views.py:13` automatically redirects unauthenticated users to the login page for security.
+</Info>
+
+## Supported Sensor Types
+
+The dashboard supports six distinct sensor types, each with specialized monitoring capabilities:
+
+<CardGroup cols={3}>
+  <Card title="Temperature (Plants)" icon="seedling">
+    Monitor temperature conditions for plant environments in degrees
+  </Card>
+  <Card title="Temperature (Aquarium)" icon="fish">
+    Track water temperature for aquatic systems in degrees
+  </Card>
+  <Card title="Humidity" icon="droplet">
+    Measure environmental humidity levels in percentage
+  </Card>
+  <Card title="Water Level" icon="water">
+    Monitor water levels with customizable minimum thresholds in centimeters
+  </Card>
+  <Card title="Light (LDR)" icon="sun">
+    Track ambient light conditions in lumens with average calculations
+  </Card>
+  <Card title="Water Quality (TDS)" icon="flask">
+    Measure total dissolved solids in water quality monitoring in ppm
+  </Card>
+</CardGroup>
+
+## URL Routes
+
+The dashboard provides dedicated routes for each monitoring function:
+
+```python
+# URL configuration from sensores/urls.py
+urlpatterns = [    
+    path('', views.home, name='home'),
+    path('login/', views.userLogin, name='login'),
+    path('logout/', views.logOut, name='logout'),    
+    path('temp-aquario/', views.temperaturaAquario, name='temp-aquario'),
+    path('temp-plantas/', views.temperaturaPlantas, name='temp-plantas'),
+    path('umidade/', views.umidade, name='umidade'),
+    path('nivel/', views.nivelAgua, name='nivel'),
+    path('ldr/', views.ldr, name='ldr'),
+    path('tds/', views.tds, name='tds'),
+    path('api/', include(router.urls)),         
+]
+```
+
+## Getting Started
+
+<Steps>
+  <Step title="Access the Dashboard">
+    Navigate to your dashboard URL and you'll be redirected to the login page if not authenticated
+  </Step>
+  <Step title="Authenticate">
+    Log in with your credentials to access the monitoring interface
+  </Step>
+  <Step title="View Sensor Data">
+    The home dashboard displays all sensor readings in a unified view
+  </Step>
+  <Step title="Navigate to Specific Sensors">
+    Use the navigation menu to view detailed data for specific sensor types
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="key" href="/dashboard/authentication">
+    Learn about user authentication and login workflows
+  </Card>
+  <Card title="Monitoring Sensors" icon="radar" href="/dashboard/monitoring-sensors">
+    Explore detailed sensor monitoring capabilities
+  </Card>
+  <Card title="Data Visualization" icon="chart-mixed" href="/dashboard/data-visualization">
+    Understand how to visualize and analyze sensor data
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/overview">
+    Connect IoT devices using the REST API
+  </Card>
+</CardGroup>

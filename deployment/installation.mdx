@@ -1,0 +1,237 @@
+---
+title: 'Installation Guide'
+description: 'Step-by-step guide to install and set up Aqua-IoT on your system'
+---
+
+## Overview
+
+Aqua-IoT is a Django-based web application for monitoring aquaponics systems. This guide will walk you through installing the application on your development or production environment.
+
+## Prerequisites
+
+Before installing Aqua-IoT, ensure you have the following installed on your system:
+
+- **Git** - Version control system ([Download & Install Git](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git))
+- **Python 3.7+** - Programming language runtime ([Download & Install Python](https://www.python.org/downloads/))
+- **pip** - Python package manager (included with Python)
+- **PostgreSQL** - Database server (recommended for production)
+- **MQTT Broker** - For IoT device communication (e.g., Mosquitto, HiveMQ)
+
+<Warning>
+The application requires Python 3.7 or higher. Ensure your Python version is compatible before proceeding.
+</Warning>
+
+## Installation Steps
+
+<Steps>
+  <Step title="Clone the Repository">
+    Clone the Aqua-IoT repository from GitHub to your local machine:
+
+    ```bash
+    git clone https://github.com/barrancocarlos/Aqua-IoT.git
+    cd Aqua-IoT
+    ```
+  </Step>
+
+  <Step title="Navigate to Django Directory">
+    The Django application is located in the `Django` subdirectory:
+
+    ```bash
+    cd Django
+    ```
+  </Step>
+
+  <Step title="Set Up Virtual Environment">
+    Install pipenv and create an isolated Python environment:
+
+    <CodeGroup>
+      ```bash Using pipenv (Recommended)
+      # Install pipenv globally
+      pip install pipenv
+
+      # Activate virtual environment
+      pipenv shell
+
+      # Install all dependencies
+      pipenv install
+      ```
+
+      ```bash Using venv
+      # Create virtual environment
+      python -m venv venv
+
+      # Activate on Linux/macOS
+      source venv/bin/activate
+
+      # Activate on Windows
+      venv\Scripts\activate
+
+      # Install dependencies manually
+      pip install django djangorestframework psycopg2
+      ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Install Dependencies">
+    The application requires the following Python packages (defined in `Pipfile`):
+
+    - **Django** - Web framework
+    - **Django REST Framework** - API toolkit
+    - **psycopg2** - PostgreSQL database adapter
+
+    If using pipenv (recommended):
+    ```bash
+    pipenv install
+    ```
+  </Step>
+
+  <Step title="Configure Database">
+    Set up your PostgreSQL database. See the [Configuration](/deployment/configuration) page for detailed database settings.
+
+    ```bash
+    # Create PostgreSQL database
+    createdb aqua
+    ```
+  </Step>
+
+  <Step title="Run Database Migrations">
+    Apply database migrations to set up the schema:
+
+    ```bash
+    python manage.py migrate
+    ```
+  </Step>
+
+  <Step title="Create Superuser (Optional)">
+    Create an admin user to access the Django admin panel:
+
+    ```bash
+    python manage.py createsuperuser
+    ```
+
+    Follow the prompts to set username, email, and password.
+  </Step>
+
+  <Step title="Collect Static Files">
+    Gather all static files into the `STATIC_ROOT` directory:
+
+    ```bash
+    python manage.py collectstatic
+    ```
+  </Step>
+
+  <Step title="Run Development Server">
+    Start the Django development server:
+
+    ```bash
+    python manage.py runserver
+    ```
+
+    The application will be available at `http://localhost:8000`
+  </Step>
+</Steps>
+
+## Verify Installation
+
+After completing the installation:
+
+1. **Access the Web Interface**: Open your browser and navigate to `http://localhost:8000`
+2. **Check Admin Panel**: Visit `http://localhost:8000/admin` and log in with your superuser credentials
+3. **Test API Endpoints**: Verify that the REST API is accessible
+
+## MQTT Broker Setup
+
+For IoT device communication, you need to set up an MQTT broker:
+
+<CodeGroup>
+  ```bash Mosquitto (Linux)
+  # Install Mosquitto
+  sudo apt-get update
+  sudo apt-get install mosquitto mosquitto-clients
+
+  # Start Mosquitto service
+  sudo systemctl start mosquitto
+  sudo systemctl enable mosquitto
+  ```
+
+  ```bash Mosquitto (macOS)
+  # Install using Homebrew
+  brew install mosquitto
+
+  # Start Mosquitto
+  brew services start mosquitto
+  ```
+
+  ```bash Mosquitto (Windows)
+  # Download installer from https://mosquitto.org/download/
+  # Run installer and start service from Services panel
+  ```
+</CodeGroup>
+
+## Arduino Setup
+
+To connect Arduino sensors to the system:
+
+1. Install the Arduino IDE
+2. Install required libraries:
+   - DHT sensor library
+   - OneWire
+   - DallasTemperature
+   - GravityTDS
+
+3. Upload the sensor code from the `Arduino/` directory to your Arduino board
+4. Configure the MQTT broker connection in the Arduino code
+
+## Troubleshooting
+
+### Common Issues
+
+<AccordionGroup>
+  <Accordion title="ImportError: No module named 'psycopg2'">
+    The PostgreSQL adapter is not installed. Run:
+    ```bash
+    pipenv install psycopg2
+    ```
+    
+    On some systems, you may need to install `psycopg2-binary` instead:
+    ```bash
+    pip install psycopg2-binary
+    ```
+  </Accordion>
+
+  <Accordion title="Database connection error">
+    Ensure PostgreSQL is running and the database exists:
+    ```bash
+    # Check PostgreSQL status
+    sudo systemctl status postgresql
+    
+    # Create database if it doesn't exist
+    createdb aqua
+    ```
+  </Accordion>
+
+  <Accordion title="Port 8000 already in use">
+    Specify a different port when running the server:
+    ```bash
+    python manage.py runserver 8080
+    ```
+  </Accordion>
+
+  <Accordion title="Static files not loading">
+    Run collectstatic again and ensure `STATIC_ROOT` is properly configured:
+    ```bash
+    python manage.py collectstatic --clear
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="gear" href="/deployment/configuration">
+    Configure database, security, and application settings
+  </Card>
+  <Card title="Production Setup" icon="server" href="/deployment/production-setup">
+    Deploy Aqua-IoT to a production environment
+  </Card>
+</CardGroup>

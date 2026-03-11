@@ -1,0 +1,306 @@
+---
+title: 'Light Sensor (LDR) API'
+description: 'Submit light intensity readings from LDR sensors'
+---
+
+## Overview
+
+The Light Sensor (LDR) endpoint allows you to submit light intensity readings from Light Dependent Resistor (LDR) sensors monitoring plant environments. This endpoint tracks luminosity levels to ensure optimal lighting conditions.
+
+## Endpoint
+
+```
+POST /api/ldr/
+```
+
+## Model Structure
+
+The `Ldr` model extends the base `Sensor` model:
+
+```python
+class Ldr(Sensor):
+    luminosidade = models.FloatField(max_length=200, default='00')
+    media_luminosidade = models.FloatField(max_length=200, default='30')
+    unidade_medida = models.CharField(max_length=50, default='lumen')
+```
+
+Source: `models.py:38-43`
+
+## ViewSet Implementation
+
+```python
+class LdrViewset(viewsets.ViewSet):
+    permission_classes = (IsAuthenticated,)
+    
+    def create(self, request):
+        serializer = LdrSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        the_response = LdrSerializer(serializer.save())
+        return Response(the_response.data, status=status.HTTP_201_CREATED)
+```
+
+Source: `views.py:133-139`
+
+## Authentication
+
+<Warning>
+This endpoint requires authentication. Include your API token in the Authorization header.
+</Warning>
+
+```
+Authorization: Token 2d75140c068049278f9cb7d39b1a20f05aecdc56
+```
+
+See [Authentication](/api/authentication) for details.
+
+## Request Parameters
+
+<ParamField body="nome" type="string" required>
+  Sensor name identifier
+  
+  **Example:** `"LDR"`
+</ParamField>
+
+<ParamField body="tipo" type="string" required>
+  Type of sensor location
+  
+  **Example:** `"Plantas"`
+</ParamField>
+
+<ParamField body="grupo" type="string" required>
+  Sensor group classification
+  
+  **Example:** `"Grupo P"`
+</ParamField>
+
+<ParamField body="luminosidade" type="float" required>
+  Current light intensity reading from the sensor
+  
+  **Example:** `450.5`
+</ParamField>
+
+<ParamField body="media_luminosidade" type="float" required>
+  Average or target light intensity level
+  
+  **Default:** `30`
+  
+  **Example:** `30`
+</ParamField>
+
+<ParamField body="unidade_medida" type="string" required>
+  Unit of measurement for light intensity
+  
+  **Default:** `"lumen"`
+  
+  **Example:** `"lumen"`
+</ParamField>
+
+## Response Fields
+
+<ResponseField name="id" type="integer">
+  Auto-generated unique identifier for the record
+</ResponseField>
+
+<ResponseField name="nome" type="string">
+  Sensor name as provided in request
+</ResponseField>
+
+<ResponseField name="tipo" type="string">
+  Sensor type as provided in request
+</ResponseField>
+
+<ResponseField name="grupo" type="string">
+  Sensor group as provided in request
+</ResponseField>
+
+<ResponseField name="luminosidade" type="float">
+  Current light intensity value submitted
+</ResponseField>
+
+<ResponseField name="media_luminosidade" type="float">
+  Average or target light intensity level
+</ResponseField>
+
+<ResponseField name="unidade_medida" type="string">
+  Unit of measurement for light intensity
+</ResponseField>
+
+<ResponseField name="data_criacao" type="datetime">
+  Timestamp when the record was created (auto-generated)
+</ResponseField>
+
+## Example Request
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/ldr/ \
+  -H "Authorization: Token 2d75140c068049278f9cb7d39b1a20f05aecdc56" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "nome": "LDR",
+    "tipo": "Plantas",
+    "grupo": "Grupo P",
+    "luminosidade": "450.5",
+    "media_luminosidade": 30,
+    "unidade_medida": "lumen"
+  }'
+```
+
+## Example Response
+
+**Status Code:** `201 Created`
+
+```json
+{
+  "id": 89,
+  "nome": "LDR",
+  "tipo": "Plantas",
+  "grupo": "Grupo P",
+  "luminosidade": 450.5,
+  "media_luminosidade": 30.0,
+  "unidade_medida": "lumen",
+  "data_criacao": "2026-03-11T10:30:45.123456Z"
+}
+```
+
+## Error Responses
+
+### Missing Authentication Token
+
+**Status Code:** `401 Unauthorized`
+
+```json
+{
+  "detail": "Authentication credentials were not provided."
+}
+```
+
+### Invalid Token
+
+**Status Code:** `401 Unauthorized`
+
+```json
+{
+  "detail": "Invalid token."
+}
+```
+
+### Missing Required Fields
+
+**Status Code:** `400 Bad Request`
+
+```json
+{
+  "luminosidade": [
+    "This field is required."
+  ],
+  "nome": [
+    "This field is required."
+  ]
+}
+```
+
+### Invalid Data Type
+
+**Status Code:** `400 Bad Request`
+
+```json
+{
+  "luminosidade": [
+    "A valid number is required."
+  ],
+  "media_luminosidade": [
+    "A valid number is required."
+  ]
+}
+```
+
+## MQTT Integration Example
+
+Example from the Raspberry Pi MQTT client:
+
+```python
+# From mqtt-django.py:49-61
+if message.topic == topic_ldr:
+    nome = "LDR"
+    tipo = "Plantas"
+    grupo = "Grupo P"
+    luminosidade = str(message.payload.decode("utf-8"))
+    media_luminosidade = 30
+    unidade_medida = "lumen"
+    
+    luminosidade = {
+        'nome': nome,
+        'tipo': tipo,
+        'grupo': grupo,
+        'luminosidade': luminosidade,
+        'media_luminosidade': media_luminosidade,
+        'unidade_medida': unidade_medida
+    }
+    
+    headers = {'Authorization': 'Token 2d75140c068049278f9cb7d39b1a20f05aecdc56'}
+    url_ldr = "http://127.0.0.1:8000/api/ldr/"
+    send_luminosidade = requests.post(
+        url_ldr,
+        headers=headers,
+        json=luminosidade
+    )
+```
+
+## Serializer Details
+
+The endpoint uses `LdrSerializer` with `depth=1` to include related object details:
+
+```python
+class LdrSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Ldr
+        fields = '__all__'
+        depth = 1
+
+    def create(self, validated_data):
+        ldr = Ldr.objects.create(**validated_data)
+        ldr.save()
+        return ldr
+```
+
+Source: `serializers.py:53-62`
+
+## Use Cases
+
+- Monitor light intensity in plant growing environments
+- Track daily light cycles for optimal plant growth
+- Automate grow lights based on natural light levels
+- Ensure plants receive adequate light for photosynthesis
+- Historical light data analysis
+- IoT device integration via MQTT
+- Greenhouse light management
+
+## Light Requirements by Plant Type
+
+Different plants require different light levels:
+
+- **Low Light Plants**: 50-250 lumens (Snake plants, Pothos)
+- **Medium Light Plants**: 250-1000 lumens (Ferns, Philodendrons)
+- **High Light Plants**: 1000+ lumens (Succulents, Cacti, Tomatoes)
+- **Seedlings**: 2000-3000 lumens for optimal growth
+
+## Best Practices
+
+1. **Regular Readings**: Submit light readings at consistent intervals (e.g., every 10-15 minutes)
+2. **Daily Cycles**: Monitor throughout the day to track natural light variations
+3. **Sensor Placement**: Position LDR sensors at plant canopy level
+4. **Calibration**: Regularly calibrate sensors for accuracy
+5. **Baseline Tracking**: Use `media_luminosidade` to track target light levels
+6. **Seasonal Adjustments**: Account for seasonal variations in natural light
+
+## LDR Sensor Notes
+
+<Info>
+  LDR (Light Dependent Resistor) sensors provide analog readings that vary with light intensity. Lower resistance indicates higher light levels. The sensor readings should be converted to lumens or lux for meaningful measurements.
+</Info>
+
+## Related Endpoints
+
+- [Temperature Plants API](/api/temperature-plants) - For monitoring temperature in plant environments
+- [Humidity API](/api/humidity) - For monitoring humidity levels
+- [Water Level API](/api/water-level) - For monitoring water levels

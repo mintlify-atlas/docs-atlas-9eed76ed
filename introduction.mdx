@@ -1,0 +1,134 @@
+---
+title: Introduction to Aqua-IoT
+description: A comprehensive aquaponics monitoring system using Arduino sensors, MQTT messaging, and Django web dashboard
+---
+
+## What is Aqua-IoT?
+
+Aqua-IoT is an Internet of Things (IoT) monitoring system designed specifically for aquaponics environments. It provides real-time monitoring of critical environmental parameters across both aquatic and plant growing zones, enabling operators to maintain optimal conditions for fish and plant health.
+
+<Note>
+Aquaponics is a symbiotic system combining aquaculture (fish farming) with hydroponics (soilless plant cultivation). Fish waste provides nutrients for plants, while plants filter and clean the water for fish.
+</Note>
+
+## System Overview
+
+Aqua-IoT consists of three main components working together to collect, transmit, and visualize sensor data:
+
+<CardGroup cols={3}>
+  <Card title="Arduino Sensors" icon="microchip">
+    Hardware layer with six sensor types monitoring water and environmental conditions
+  </Card>
+  <Card title="MQTT Bridge" icon="bridge">
+    Raspberry Pi running Python scripts to relay data between Arduino and cloud
+  </Card>
+  <Card title="Django Dashboard" icon="chart-line">
+    Web application with REST API for data storage and visualization
+  </Card>
+</CardGroup>
+
+## Monitored Parameters
+
+The system tracks six critical metrics across two zones:
+
+### Aquatic Zone (Aquarium)
+
+- **Water Temperature**: Monitored using DS18B20 digital temperature sensor
+- **TDS (Total Dissolved Solids)**: Measures nutrient concentration in parts per million (ppm)
+- **Water Level**: Ultrasonic sensor measures distance in centimeters to track water levels
+
+### Plant Zone
+
+- **Air Temperature**: DHT11 sensor measures ambient temperature
+- **Humidity**: DHT11 sensor tracks relative humidity percentage
+- **Light Intensity**: LDR (Light Dependent Resistor) measures luminosity in lumens
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Real-Time Monitoring">
+    Continuous sensor data collection every 2 seconds with instant MQTT transmission
+  </Card>
+  <Card title="RESTful API">
+    Token-authenticated endpoints for secure data ingestion and retrieval
+  </Card>
+  <Card title="Historical Data">
+    PostgreSQL database stores all sensor readings with timestamps for trend analysis
+  </Card>
+  <Card title="Web Dashboard">
+    Responsive interface displaying current conditions and historical trends
+  </Card>
+</CardGroup>
+
+## Technology Stack
+
+### Hardware
+- **Arduino**: Microcontroller platform for sensor integration
+- **Raspberry Pi**: Edge computing device running MQTT client
+- **Sensors**: DHT11, DS18B20, HC-SR04 ultrasonic, TDS meter, LDR photoresistor
+
+### Software
+- **Arduino C++**: Firmware for sensor reading and serial communication
+- **Python 3.7+**: MQTT bridge scripts using `paho-mqtt` and `pyserial`
+- **Django 3.2+**: Web framework with Django REST Framework
+- **PostgreSQL**: Relational database for sensor data storage
+- **Mosquitto MQTT**: Message broker for publish/subscribe messaging
+
+## Architecture Highlights
+
+<Steps>
+  <Step title="Sensor Data Collection">
+    Arduino reads six sensors every 2 seconds and outputs formatted data via serial connection
+  </Step>
+  <Step title="Serial to MQTT">
+    Raspberry Pi reads serial data and publishes to six MQTT topics on local Mosquitto broker
+  </Step>
+  <Step title="MQTT to Django">
+    Second Python script subscribes to MQTT topics and posts data to Django REST API endpoints
+  </Step>
+  <Step title="Data Persistence">
+    Django models store readings in PostgreSQL with automatic timestamps
+  </Step>
+  <Step title="Visualization">
+    Web dashboard queries database and displays real-time and historical data
+  </Step>
+</Steps>
+
+## MQTT Topic Structure
+
+The system uses a organized topic hierarchy:
+
+```plaintext
+sensores/
+├── temperatura-plantas   # Air temperature (DHT11)
+├── umidade              # Humidity (DHT11)
+├── ldr                  # Light intensity (LDR)
+├── temperatura-agua     # Water temperature (DS18B20)
+├── tds                  # Total dissolved solids
+└── nivel                # Water level (ultrasonic)
+```
+
+## Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Small-Scale Aquaponics">
+    Monitor home or educational aquaponics systems with automated alerts
+  </Card>
+  <Card title="Research & Development">
+    Collect data for optimizing growing conditions and system efficiency
+  </Card>
+  <Card title="Commercial Operations">
+    Scale monitoring across multiple systems with centralized dashboard
+  </Card>
+  <Card title="IoT Education">
+    Learn sensor integration, MQTT messaging, and full-stack development
+  </Card>
+</CardGroup>
+
+<Warning>
+This project was developed for educational and monitoring purposes. For production deployment, ensure proper security configurations including changing default credentials, enabling MQTT authentication, and securing the Django SECRET_KEY.
+</Warning>
+
+## Next Steps
+
+Ready to get started? Follow our [quickstart guide](/quickstart) to set up your own Aqua-IoT system, or dive into the [architecture documentation](/architecture) to understand the technical implementation details.

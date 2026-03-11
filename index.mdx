@@ -1,97 +1,70 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "Aqua-IoT Documentation"
+description: "Real-time monitoring dashboard for aquaponics systems using IoT sensors and MQTT communication"
 ---
 
-## Setting up
+<div className="hero-section" style={{background: 'linear-gradient(135deg, #F4F3EE 0%, #f6f4ef 100%)', padding: '3rem 2rem', borderRadius: '6px', border: '1px solid #e6c9b9', marginBottom: '2rem'}}>
+  <h1 style={{fontFamily: 'Georgia, serif', fontSize: '36px', fontWeight: '700', color: '#3B3229', marginBottom: '1rem'}}>
+    Monitor Your Aquaponics System in Real-Time
+  </h1>
+  <p style={{fontFamily: 'Georgia, serif', fontSize: '18px', color: '#3B3229', marginBottom: '2rem', lineHeight: '1.6'}}>
+    Aqua-IoT combines Arduino sensors, Raspberry Pi, and MQTT messaging to deliver live sensor data to a beautiful Django web dashboard. Track temperature, humidity, water levels, and more.
+  </p>
+  <div style={{display: 'flex', gap: '1rem', flexWrap: 'wrap'}}>
+    <a href="/quickstart" style={{background: '#e94b35', color: '#ffffff', padding: '0.75rem 1.5rem', borderRadius: '4px', textDecoration: 'none', fontFamily: 'Georgia, serif', fontWeight: '700'}}>
+      Get Started
+    </a>
+    <a href="/architecture" style={{background: '#f3f1eb', color: '#4a4a4a', padding: '0.75rem 1.5rem', borderRadius: '4px', textDecoration: 'none', fontFamily: 'Georgia, serif', fontWeight: '700'}}>
+      View Architecture
+    </a>
+  </div>
+</div>
 
-Get your documentation site up and running in minutes.
+## Key Features
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Real-Time Sensor Monitoring" icon="chart-line" href="/dashboard/monitoring-sensors">
+    Monitor temperature, humidity, water level, TDS, and light sensors in real-time through an intuitive web dashboard.
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="MQTT-Based IoT Pipeline" icon="network-wired" href="/hardware/mqtt-broker">
+    Reliable sensor data communication using MQTT broker between Arduino devices and the Django application.
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="Arduino & Raspberry Pi" icon="microchip" href="/hardware/arduino-sensors">
+    Hardware integration with Arduino sensors and Raspberry Pi bridge for seamless data collection.
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="REST API" icon="code" href="/api/overview">
+    RESTful API endpoints for sensor data ingestion with authentication and secure access control.
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## Quick Navigation
 
-Everything you need to create world-class documentation.
+<CardGroup cols={3}>
+  <Card title="Hardware Setup" icon="screwdriver-wrench" href="/hardware/arduino-sensors">
+    Configure Arduino sensors, Raspberry Pi bridge, and MQTT broker
+  </Card>
+  <Card title="Web Dashboard" icon="display" href="/dashboard/overview">
+    Learn about the Django dashboard and data visualization features
+  </Card>
+  <Card title="API Reference" icon="book-open" href="/api/overview">
+    Explore REST API endpoints for sensor data
+  </Card>
+</CardGroup>
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+## System Components
 
-## Need inspiration?
+<Note>
+  Aqua-IoT consists of three main components that work together to provide real-time aquaponics monitoring:
+</Note>
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+<Steps>
+  <Step title="Arduino Sensors">
+    Collect data from multiple sensors: DHT11 (temperature/humidity), DS18B20 (water temperature), ultrasonic (water level), LDR (light), and TDS sensor.
+  </Step>
+  <Step title="Raspberry Pi MQTT Bridge">
+    Receive sensor data from Arduino via serial connection and publish to MQTT broker for distribution.
+  </Step>
+  <Step title="Django Web Application">
+    Subscribe to MQTT topics, store sensor data in database, and display real-time metrics in a responsive web dashboard.
+  </Step>
+</Steps>

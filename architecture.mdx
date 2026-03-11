@@ -1,0 +1,813 @@
+---
+title: System Architecture
+description: Deep dive into the three-tier IoT architecture of Aqua-IoT
+---
+
+## Architecture Overview
+
+Aqua-IoT implements a three-tier IoT architecture separating sensor data collection, message-based communication, and data persistence/visualization. This design provides modularity, scalability, and fault tolerance.
+
+```mermaid
+graph TB
+    subgraph "Tier 1: Sensor Layer"
+        A[DHT11 Sensor] -->|Digital| Arduino[Arduino Board]
+        B[DS18B20 Sensor] -->|OneWire| Arduino
+        C[HC-SR04 Ultrasonic] -->|Digital| Arduino
+        D[TDS Sensor] -->|Analog| Arduino
+        E[LDR Photoresistor] -->|Analog| Arduino
+    end
+    
+    subgraph "Tier 2: Edge Gateway"
+        Arduino -->|USB Serial| RPi[Raspberry Pi]
+        RPi -->|Publish| MQTT[Mosquitto MQTT Broker]
+        MQTT -->|Subscribe| RPi
+    end
+    
+    subgraph "Tier 3: Cloud Application"
+        RPi -->|HTTP POST| API[Django REST API]
+        API -->|Store| DB[(PostgreSQL)]
+        DB -->|Query| Web[Web Dashboard]
+    end
+    
+    User[User] -->|HTTPS| Web
+```
+
+## Tier 1: Sensor Layer
+
+The sensor layer consists of an Arduino microcontroller with five physical sensors monitoring six environmental parameters.
+
+### Arduino Firmware Architecture
+
+The main firmware loop (`Arduino/sensores.ino`) executes a 2-second polling cycle:
+
+<Steps>
+  <Step title="Initialization">
+    The `setup()` function initializes all sensors and serial communication:
+
+    ```cpp
+    void setup() {
+      Serial.begin(9600);  // 9600 baud serial
+      dht.begin();         // Initialize DHT11
+      sensors.begin();     // Initialize DS18B20
+      gravityTds.begin();  // Initialize TDS sensor
+      pinMode(echo, INPUT);
+      pinMode(trigger, OUTPUT);
+    }
+    ```
+  </Step>
+
+  <Step title="Sensor Reading">
+    Each iteration of `loop()` reads all six sensors sequentially:
+
+    ```cpp
+    void loop() {
+      delay(2000);  // 2-second interval
+      
+      // DHT11: Temperature and humidity
+      float h = dht.readHumidity();
+      float t = dht.readTemperature();
+      
+      // DS18B20: Water temperature
+      sensors.requestTemperatures();
+      float waterTemp = sensors.getTempCByIndex(0);
+      
+      // TDS: Total dissolved solids
+      gravityTds.setTemperature(25);
+      gravityTds.update();
+      float tdsValue = gravityTds.getTdsValue();
+      
+      // HC-SR04: Water level
+      calculo();  // Updates global 'distancia'
+      
+      // LDR: Light intensity
+      int sensorVal = analogRead(sensorPin);
+      int lux = sensorRawToPhys(sensorVal);
+    }
+    ```
+  </Step>
+
+  <Step title="Data Serialization">
+    Sensor values are printed to serial in a specific format that the Raspberry Pi expects:
+
+    ```cpp
+    Serial.print(F("Umidade: "));
+    Serial.print(h);
+    Serial.print(F("%  Temperatura: "));
+    Serial.print(t);
+    Serial.print(F("°C "));
+    // ... continues for all sensors
+    ```
+
+    <Warning>
+    The serial output format is critical. The Python script on Raspberry Pi uses `wrap(string, 5)` to split the output into 5-character chunks for each sensor. Changes to the Arduino output format require corresponding updates in `mqtt-arduino.py`.
+    </Warning>
+  </Step>
+</Steps>
+
+### Sensor Details
+
+<Tabs>
+  <Tab title="DHT11">
+    **Type**: Digital temperature and humidity sensor
+    
+    **Specifications**:
+    - Temperature range: 0-50°C (±2°C accuracy)
+    - Humidity range: 20-90% RH (±5% accuracy)
+    - Sampling rate: 1 Hz (once per second)
+    - Interface: Single-wire digital
+
+    **Pin Configuration**:
+    ```cpp
+    #define DHTPIN 2
+    #define DHTTYPE DHT11
+    DHT dht(DHTPIN, DHTTYPE);
+    ```
+
+    **Measurements**:
+    - Air temperature (plants zone)
+    - Relative humidity (plants zone)
+  </Tab>
+
+  <Tab title="DS18B20">
+    **Type**: Digital waterproof temperature sensor
+    
+    **Specifications**:
+    - Temperature range: -55°C to +125°C
+    - Accuracy: ±0.5°C from -10°C to +85°C
+    - Resolution: 9-12 bits (configurable)
+    - Interface: 1-Wire protocol
+
+    **Pin Configuration**:
+    ```cpp
+    #define DS18B20 10
+    OneWire ourWire(DS18B20);
+    DallasTemperature sensors(&ourWire);
+    ```
+
+    **Usage**:
+    ```cpp
+    sensors.requestTemperatures();
+    float temp = sensors.getTempCByIndex(0);
+    ```
+
+    <Note>
+    The DS18B20 requires a 4.7kΩ pull-up resistor between the data line and VCC for reliable 1-Wire communication.
+    </Note>
+  </Tab>
+
+  <Tab title="HC-SR04">
+    **Type**: Ultrasonic distance sensor
+    
+    **Specifications**:
+    - Range: 2cm to 400cm
+    - Accuracy: ±3mm
+    - Measuring angle: 15 degrees
+    - Trigger: 10µs pulse
+
+    **Pin Configuration**:
+    ```cpp
+    const int echo = 4;
+    const int trigger = 6;
+    ```
+
+    **Distance Calculation**:
+    ```cpp
+    void calculo() {
+      digitalWrite(trigger, LOW);
+      delayMicroseconds(2);
+      digitalWrite(trigger, HIGH);
+      delayMicroseconds(10);
+      digitalWrite(trigger, LOW);
+      
+      tempo = pulseIn(echo, HIGH);
+      // Distance = (time * speed_of_sound) / 2
+      distancia = float(tempo * 0.0343) / 2;
+    }
+    ```
+
+    **Application**: Measures distance from sensor to water surface to calculate water level in centimeters.
+  </Tab>
+
+  <Tab title="TDS Sensor">
+    **Type**: Analog Total Dissolved Solids sensor
+    
+    **Specifications**:
+    - Measurement range: 0-1000 ppm
+    - Accuracy: ±10%
+    - Operating voltage: 5V DC
+    - Interface: Analog voltage output
+
+    **Pin Configuration**:
+    ```cpp
+    #define TdsSensorPin A4
+    GravityTDS gravityTds;
+    
+    gravityTds.setPin(TdsSensorPin);
+    gravityTds.setAref(5.0);
+    gravityTds.setAdcRange(1024);
+    ```
+
+    **Temperature Compensation**:
+    ```cpp
+    float media = 25;  // Reference temperature
+    gravityTds.setTemperature(media);
+    gravityTds.update();
+    float tdsValue = gravityTds.getTdsValue();
+    ```
+
+    **Purpose**: Measures nutrient concentration in water. Higher TDS indicates more dissolved minerals and fish waste nutrients available for plants.
+  </Tab>
+
+  <Tab title="LDR">
+    **Type**: Light Dependent Resistor (photoresistor)
+    
+    **Specifications**:
+    - Resistance range: 1kΩ (bright light) to 10MΩ (darkness)
+    - Response time: 20-30ms
+    - Peak sensitivity: ~540nm (green light)
+
+    **Circuit Configuration**:
+    ```cpp
+    #define VIN 5      // Supply voltage
+    #define R 10000    // 10kΩ series resistor
+    const int sensorPin = A0;
+    ```
+
+    **Voltage Divider**:
+    ```
+    VIN (5V) ----[LDR]---- A0 ----[10kΩ]---- GND
+    ```
+
+    **Lumen Conversion**:
+    ```cpp
+    int sensorRawToPhys(int raw) {
+      // Convert ADC to voltage
+      float Vout = float(raw) * (VIN / float(1024));
+      
+      // Calculate LDR resistance
+      float RLDR = (R * (VIN - Vout)) / Vout;
+      
+      // Convert to lumens (empirical formula)
+      int phys = 500 / (RLDR / 1000);
+      return phys;
+    }
+    ```
+
+    **Application**: Monitors light intensity for plant photosynthesis. Ideal range for most plants is 30-50 lumens.
+  </Tab>
+</Tabs>
+
+## Tier 2: Edge Gateway
+
+The Raspberry Pi serves as an edge gateway, bridging the Arduino's serial communication with the cloud-based Django application using MQTT as an intermediary.
+
+### MQTT Broker (Mosquitto)
+
+**Purpose**: Decouples data producers (Arduino) from consumers (Django API), enabling asynchronous, reliable message delivery.
+
+**Configuration**:
+```python
+# mqtt-arduino.py and mqtt-django.py
+broker = 'localhost'
+port = 18083
+client_id = 'aqua'  # Unique client identifier
+```
+
+<Note>
+The system uses Mosquitto MQTT broker running locally on the Raspberry Pi. For distributed deployments, update the `broker` address to point to a remote MQTT server.
+</Note>
+
+### MQTT Topic Hierarchy
+
+Aqua-IoT uses six dedicated topics under the `sensores/` namespace:
+
+```plaintext
+sensores/
+├── temperatura-plantas   # Air temperature from DHT11
+├── umidade              # Humidity from DHT11
+├── ldr                  # Light intensity from LDR
+├── temperatura-agua     # Water temperature from DS18B20
+├── tds                  # Total dissolved solids
+└── nivel                # Water level from HC-SR04
+```
+
+**Publisher**: `mqtt-arduino.py` (reads Arduino serial, publishes to topics)
+**Subscriber**: `mqtt-django.py` (subscribes to topics, posts to Django API)
+
+### Data Flow: Arduino to MQTT
+
+The `mqtt-arduino.py` script acts as a serial-to-MQTT bridge:
+
+<Steps>
+  <Step title="Serial Connection">
+    Establishes USB serial connection with Arduino:
+
+    ```python
+    import serial
+    
+    # Connect to Arduino on USB port
+    ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
+    time.sleep(2)  # Wait for Arduino reset
+    ```
+  </Step>
+
+  <Step title="MQTT Client Initialization">
+    Creates MQTT client and connects to local broker:
+
+    ```python
+    import paho.mqtt.client as mqtt
+    
+    client = mqtt.Client(client_id='aqua')
+    client.on_connect = on_connect
+    client.connect(broker='localhost')
+    ```
+  </Step>
+
+  <Step title="Serial Reading and Parsing">
+    Reads Arduino serial output and splits into sensor values:
+
+    ```python
+    from textwrap import wrap
+    
+    line = ser.readline()
+    if line:
+        string = line.decode()
+        # Split into 5-character chunks
+        temp, hum, ldr, tds, temp_agua, nivel = wrap(string, 5)
+    ```
+
+    <Warning>
+    This parsing approach assumes each sensor value is exactly 5 characters. Ensure Arduino serial output is formatted consistently, or modify the parsing logic for variable-length values.
+    </Warning>
+  </Step>
+
+  <Step title="Publishing to MQTT">
+    Publishes each sensor value to its corresponding topic:
+
+    ```python
+    client.publish("sensores/temperatura", temp)
+    client.publish("sensores/umidade", hum)
+    client.publish("sensores/ldr", ldr)
+    client.publish("sensores/tds", tds)
+    client.publish("sensores/temperatura-agua", temp_agua)
+    client.publish("sensores/nivel", nivel)
+    ```
+  </Step>
+</Steps>
+
+### Data Flow: MQTT to Django
+
+The `mqtt-django.py` script subscribes to MQTT topics and forwards data to the Django REST API:
+
+<Steps>
+  <Step title="Topic Subscription">
+    Connects to MQTT broker and subscribes to all sensor topics:
+
+    ```python
+    def on_connect(client, userdata, flags, rc):
+        if rc == 0:
+            print("Conetado ao broker")
+            client.subscribe("sensores/temperatura-plantas")
+            client.subscribe("sensores/umidade")
+            client.subscribe("sensores/ldr")
+            client.subscribe("sensores/tds")
+            client.subscribe("sensores/temperatura-agua")
+            client.subscribe("sensores/nivel")
+    ```
+  </Step>
+
+  <Step title="Message Handling">
+    Receives MQTT messages and routes to appropriate handler:
+
+    ```python
+    def on_message(client, userdata, message):
+        if message.topic == "sensores/temperatura-plantas":
+            # Handle temperature message
+        elif message.topic == "sensores/umidade":
+            # Handle humidity message
+        # ... etc for all topics
+    ```
+  </Step>
+
+  <Step title="API Payload Construction">
+    Creates JSON payload with sensor metadata:
+
+    ```python
+    # Example: Temperature sensor
+    nome = "Temperatura"
+    tipo = "Plantas"
+    grupo = "Grupo P"
+    temperatura = str(message.payload.decode("utf-8"))
+    unidade_medida = "graus"
+    
+    temperatura_plantas = {
+        'nome': nome,
+        'tipo': tipo,
+        'grupo': grupo,
+        'temperatura': temperatura,
+        'unidade_medida': unidade_medida
+    }
+    ```
+  </Step>
+
+  <Step title="HTTP POST to Django">
+    Sends data to Django REST API with token authentication:
+
+    ```python
+    import requests
+    
+    headers = {
+        'Authorization': 'Token 2d75140c068049278f9cb7d39b1a20f05aecdc56'
+    }
+    url = "http://127.0.0.1:8000/api/temperatura-plantas/"
+    
+    response = requests.post(url, headers=headers, json=temperatura_plantas)
+    print(response)  # Should be <Response [201]>
+    ```
+
+    <Warning>
+    The authentication token is hardcoded in the script. For production, store tokens in environment variables or a secure configuration file. Generate a unique token for each deployment.
+    </Warning>
+  </Step>
+</Steps>
+
+## Tier 3: Cloud Application Layer
+
+The Django application provides data persistence, REST API endpoints, and a web dashboard for visualization.
+
+### Django Project Structure
+
+```plaintext
+Django/
+├── manage.py
+├── Pipfile                 # Dependencies: django, djangorestframework, psycopg2
+├── painel/                 # Project configuration
+│   ├── settings.py         # Database, REST framework config
+│   ├── urls.py             # URL routing
+│   └── wsgi.py             # WSGI entry point
+├── sensores/               # Main application
+│   ├── models.py           # Database models
+│   ├── views.py            # View functions and API viewsets
+│   ├── serializers.py      # DRF serializers
+│   ├── urls.py             # App-specific URLs
+│   └── migrations/         # Database migrations
+├── templates/              # HTML templates
+└── static/                 # CSS, JavaScript, images
+```
+
+### Database Models
+
+Aqua-IoT uses Django ORM with six sensor models inheriting from an abstract base class:
+
+```python
+class Sensor(models.Model):
+    nome = models.CharField(max_length=50)
+    tipo = models.CharField(max_length=50)      # "Plantas" or "Acuario"
+    grupo = models.CharField(max_length=50)     # "Grupo P" or "Grupo A"
+    data_criacao = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        abstract = True
+```
+
+<Tabs>
+  <Tab title="TemperaturaPlantas">
+    ```python
+    class TemperaturaPlantas(Sensor):
+        temperatura = models.FloatField(max_length=200, default='00')
+        unidade_medida = models.CharField(max_length=50, default='graus')
+        
+        def __str__(self):
+            return str(self.temperatura) + str(self.unidade_medida)
+    ```
+
+    **API Endpoint**: `/api/temperatura-plantas/`
+    **MQTT Topic**: `sensores/temperatura-plantas`
+  </Tab>
+
+  <Tab title="Umidade">
+    ```python
+    class Umidade(Sensor):
+        umidade = models.FloatField(max_length=200, default='00')
+        unidade_medida = models.CharField(max_length=50, default='porcentagem')
+        
+        def __str__(self):
+            return str(self.umidade) + str(self.unidade_medida)
+    ```
+
+    **API Endpoint**: `/api/umidade/`
+    **MQTT Topic**: `sensores/umidade`
+  </Tab>
+
+  <Tab title="TemperaturaAquario">
+    ```python
+    class TemperaturaAquario(Sensor):
+        temperatura = models.FloatField(max_length=200, default='00')
+        unidade_medida = models.CharField(max_length=50, default='graus')
+        
+        def __str__(self):
+            return str(self.temperatura) + str(self.unidade_medida)
+    ```
+
+    **API Endpoint**: `/api/temperatura-aquario/`
+    **MQTT Topic**: `sensores/temperatura-agua`
+  </Tab>
+
+  <Tab title="NivelAgua">
+    ```python
+    class NivelAgua(Sensor):
+        nivel = models.FloatField(max_length=200, default='00')
+        nivel_minimo = models.FloatField(max_length=200, default='200')
+        unidade_medida = models.CharField(max_length=50, default='centímetros')
+        
+        def __str__(self):
+            return str(self.nivel) + str(self.unidade_medida)
+    ```
+
+    **API Endpoint**: `/api/nivel/`
+    **MQTT Topic**: `sensores/nivel`
+    **Alert Threshold**: `nivel_minimo` field stores minimum safe water level
+  </Tab>
+
+  <Tab title="Ldr">
+    ```python
+    class Ldr(Sensor):
+        luminosidade = models.FloatField(max_length=200, default='00')
+        media_luminosidade = models.FloatField(max_length=200, default='30')
+        unidade_medida = models.CharField(max_length=50, default='lumen')
+        
+        def __str__(self):
+            return str(self.luminosidade) + str(self.unidade_medida)
+    ```
+
+    **API Endpoint**: `/api/ldr/`
+    **MQTT Topic**: `sensores/ldr`
+    **Target Range**: `media_luminosidade` stores optimal light level
+  </Tab>
+
+  <Tab title="Tds">
+    ```python
+    class Tds(Sensor):
+        tds = models.FloatField(max_length=200, default='00')
+        media_tds = models.FloatField(max_length=200, default='30')
+        unidade_medida = models.CharField(max_length=50, default='ppm')
+        
+        def __str__(self):
+            return str(self.tds) + str(self.unidade_medida)
+    ```
+
+    **API Endpoint**: `/api/tds/`
+    **MQTT Topic**: `sensores/tds`
+    **Target Range**: `media_tds` stores optimal TDS level (typically 100-500 ppm for aquaponics)
+  </Tab>
+</Tabs>
+
+### REST API Architecture
+
+Django REST Framework provides the API layer with token-based authentication:
+
+**Settings Configuration**:
+```python
+# Django/painel/settings.py
+INSTALLED_APPS = [
+    'rest_framework',
+    'rest_framework.authtoken',
+    'sensores',
+]
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+}
+```
+
+**ViewSet Example**:
+```python
+class TemperaturaAquarioViewset(viewsets.ViewSet):
+    permission_classes = (IsAuthenticated,)
+    
+    def create(self, request):
+        serializer = TemperaturaAquarioSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        the_response = TemperaturaAquarioSerializer(serializer.save())
+        return Response(the_response.data, status=status.HTTP_201_CREATED)
+```
+
+**API Endpoints**:
+- `POST /api/temperatura-plantas/` - Create temperature reading (plants)
+- `POST /api/umidade/` - Create humidity reading
+- `POST /api/ldr/` - Create light intensity reading
+- `POST /api/tds/` - Create TDS reading
+- `POST /api/temperatura-aquario/` - Create temperature reading (aquarium)
+- `POST /api/nivel/` - Create water level reading
+
+<Note>
+All endpoints require token authentication via `Authorization: Token <token>` header. Currently only POST (create) operations are exposed. Extend viewsets with `list()` and `retrieve()` methods to add GET endpoints.
+</Note>
+
+### Web Dashboard
+
+The dashboard view aggregates all sensor data and passes it to the template:
+
+```python
+def home(request):
+    if request.user.is_authenticated:
+        temperaturap = TemperaturaPlantas.objects.all()
+        nivel = NivelAgua.objects.all()
+        umidade = Umidade.objects.all()
+        tds = Tds.objects.all()
+        temperaturaa = TemperaturaAquario.objects.all()
+        ldr = Ldr.objects.all()
+        
+        context = {
+            'temperaturas': temperaturap,
+            'nivels': nivel,
+            'umidades': umidade,
+            'tdss': tds,
+            'temperaturaas': temperaturaa,
+            'ldrs': ldr,
+        }
+        return render(request, "index.html", context)
+    else:
+        return redirect(userLogin)
+```
+
+**Authentication**: Users must log in to access the dashboard. The system uses Django's built-in authentication with custom login/logout views.
+
+### Database Configuration
+
+Aqua-IoT uses PostgreSQL for data persistence:
+
+```python
+# Django/painel/settings.py
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql_psycopg2',
+        'NAME': 'aqua',
+        'USER': 'postgres',
+        'PASSWORD': 'pos2023',
+        'HOST': 'localhost',
+        'PORT': '5432',
+    }
+}
+```
+
+**Time Zone**: Configured for São Paulo, Brazil (`America/Sao_Paulo`) to ensure correct timestamp localization.
+
+## Data Flow Summary
+
+<Steps>
+  <Step title="Sensor Measurement">
+    Arduino reads six sensors every 2 seconds
+  </Step>
+  <Step title="Serial Transmission">
+    Arduino outputs formatted data via USB serial (9600 baud)
+  </Step>
+  <Step title="Serial to MQTT">
+    Raspberry Pi `mqtt-arduino.py` reads serial and publishes to 6 MQTT topics
+  </Step>
+  <Step title="MQTT Broker">
+    Mosquitto broker receives messages and queues for subscribers
+  </Step>
+  <Step title="MQTT to HTTP">
+    Raspberry Pi `mqtt-django.py` subscribes to topics and constructs JSON payloads
+  </Step>
+  <Step title="API Ingestion">
+    Django REST API receives POST requests, validates, and saves to database
+  </Step>
+  <Step title="Data Storage">
+    PostgreSQL stores sensor readings with automatic timestamps
+  </Step>
+  <Step title="Dashboard Query">
+    Django views query database and render HTML templates
+  </Step>
+  <Step title="User Visualization">
+    Web browser displays real-time and historical sensor data
+  </Step>
+</Steps>
+
+## Scalability Considerations
+
+<CardGroup cols={2}>
+  <Card title="Multiple Sensor Nodes">
+    Add more Arduino boards by:
+    - Using unique MQTT client IDs
+    - Creating distinct topic namespaces (`sensores/node1/`, `sensores/node2/`)
+    - Running multiple `mqtt-arduino.py` instances with different serial ports
+  </Card>
+  
+  <Card title="Remote MQTT Broker">
+    Deploy Mosquitto on a dedicated server:
+    - Update `broker` address in Python scripts
+    - Enable MQTT authentication and encryption (TLS)
+    - Configure firewall rules for port 1883 (or 8883 for TLS)
+  </Card>
+  
+  <Card title="Cloud Django Deployment">
+    Host Django on cloud platforms:
+    - Use production WSGI server (Gunicorn/uWSGI)
+    - Serve static files via CDN or Nginx
+    - Configure `ALLOWED_HOSTS` and disable `DEBUG`
+    - Use environment variables for secrets
+  </Card>
+  
+  <Card title="Time-Series Database">
+    For high-frequency data:
+    - Migrate to InfluxDB or TimescaleDB
+    - Implement data aggregation and downsampling
+    - Add retention policies to manage storage
+  </Card>
+</CardGroup>
+
+## Security Best Practices
+
+<Warning>
+The default configuration is intended for development and local testing. For production deployments, implement these security measures:
+</Warning>
+
+1. **Change Default Credentials**: Update PostgreSQL password and Django SECRET_KEY
+2. **Enable MQTT Authentication**: Configure Mosquitto with username/password or TLS certificates
+3. **Use HTTPS**: Deploy Django behind Nginx with Let's Encrypt SSL certificates
+4. **Token Rotation**: Generate unique API tokens per client and rotate regularly
+5. **Network Segmentation**: Isolate IoT devices on separate VLAN
+6. **Input Validation**: Add bounds checking on sensor values to detect malfunctions
+7. **Rate Limiting**: Implement API rate limiting to prevent abuse
+
+## Performance Optimization
+
+- **Database Indexing**: Add indexes on `data_criacao` field for faster time-range queries
+- **Query Optimization**: Use `select_related()` and `prefetch_related()` to reduce database queries
+- **Caching**: Implement Redis caching for frequently accessed dashboard data
+- **Sensor Polling**: Adjust Arduino delay for less frequent updates if 2-second interval is excessive
+- **Data Aggregation**: Pre-calculate hourly/daily averages for historical charts
+
+## Troubleshooting Architecture Issues
+
+<Tabs>
+  <Tab title="End-to-End Debugging">
+    Test each component independently:
+
+    ```bash
+    # 1. Verify Arduino serial output
+    screen /dev/ttyACM0 9600
+
+    # 2. Test MQTT publishing
+    mosquitto_sub -t "sensores/#" -v
+
+    # 3. Check Django API
+    curl -X POST http://localhost:8000/api/temperatura-plantas/ \
+      -H "Authorization: Token YOUR_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d '{"nome":"Test","tipo":"Plantas","grupo":"Grupo P","temperatura":25.5,"unidade_medida":"graus"}'
+
+    # 4. Verify database storage
+    python manage.py shell
+    >>> from sensores.models import TemperaturaPlantas
+    >>> TemperaturaPlantas.objects.count()
+    ```
+  </Tab>
+
+  <Tab title="Latency Analysis">
+    Measure time between sensor reading and database storage:
+
+    - **Arduino Loop**: ~2 seconds per iteration
+    - **Serial Transmission**: &lt;50ms
+    - **MQTT Publish**: &lt;100ms
+    - **MQTT Delivery**: &lt;50ms (local broker)
+    - **HTTP POST**: 100-500ms (depends on network)
+    - **Database Write**: 10-50ms
+
+    **Total Latency**: 2-3 seconds from sensor reading to database
+
+    <Note>
+    The main delay is the 2-second Arduino loop. For near real-time monitoring, reduce `delay(2000)` in Arduino code, but be aware this increases power consumption and data volume.
+    </Note>
+  </Tab>
+
+  <Tab title="Data Integrity">
+    Validate data consistency across components:
+
+    1. Compare Arduino serial output with MQTT messages
+    2. Verify MQTT payloads match HTTP POST data
+    3. Check database records against API responses
+    4. Monitor for missing timestamps (indicates dropped messages)
+
+    Common issues:
+    - **Serial buffer overflow**: Increase `timeout` in Python serial connection
+    - **MQTT QoS**: Default is QoS 0 (at most once). Use QoS 1 for guaranteed delivery
+    - **Database locks**: PostgreSQL may block during heavy writes; consider connection pooling
+  </Tab>
+</Tabs>
+
+## Further Reading
+
+- [MQTT Protocol Specification](http://mqtt.org/) - Understanding publish/subscribe messaging
+- [Django REST Framework Documentation](https://www.django-rest-framework.org/) - Building robust APIs
+- [Arduino Libraries Reference](https://www.arduino.cc/reference/en/libraries/) - Sensor library documentation
+- [PostgreSQL Time-Series Data](https://www.postgresql.org/docs/current/functions-datetime.html) - Optimizing time-series queries
+
+<Note>
+This architecture provides a foundation for IoT monitoring systems. Adapt the design to your specific requirements by adding alert systems, machine learning for anomaly detection, or mobile applications for remote access.
+</Note>

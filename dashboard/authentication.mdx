@@ -1,0 +1,213 @@
+---
+title: 'Authentication'
+description: 'User authentication and login system for the Aqua-IoT dashboard'
+---
+
+## Overview
+
+The Aqua-IoT dashboard implements Django's built-in authentication system to secure access to sensor data and monitoring capabilities. All dashboard features require authentication, ensuring that only authorized users can view and manage IoT sensor data.
+
+## Authentication Flow
+
+The authentication system follows a straightforward workflow:
+
+<Steps>
+  <Step title="Access Protection">
+    When accessing any dashboard page, the system checks if the user is authenticated
+  </Step>
+  <Step title="Automatic Redirect">
+    Unauthenticated users are automatically redirected to the login page
+  </Step>
+  <Step title="Credential Validation">
+    Users submit username and password credentials for verification
+  </Step>
+  <Step title="Session Creation">
+    Upon successful authentication, Django creates a secure session
+  </Step>
+  <Step title="Dashboard Access">
+    Authenticated users are redirected to the main dashboard with full access
+  </Step>
+</Steps>
+
+## Login Implementation
+
+The login view handles user authentication with Django's built-in authentication backend:
+
+```python
+# Login view from sensores/views.py:41
+def userLogin(request):
+  if request.POST:
+     username = request.POST['username']
+     password = request.POST['password']
+     user = authenticate(username=username, password=password)
+     if user is not None:
+       if user.is_active:
+         login(request, user)
+         return redirect(home)
+  else: 
+    return render(request, "login.html", {})
+```
+
+### How It Works
+
+1. **GET Request**: Displays the login form when accessed via GET request
+2. **POST Request**: Processes login credentials when form is submitted
+3. **Authentication**: Uses Django's `authenticate()` function to verify credentials
+4. **Active Check**: Ensures the user account is active before granting access
+5. **Session Start**: Calls Django's `login()` to create an authenticated session
+6. **Redirect**: Redirects to the home dashboard upon successful login
+
+<Info>
+  The authentication view is located at `sensores/views.py:41` and is accessible at the `/login/` URL route.
+</Info>
+
+## Logout Implementation
+
+Users can securely end their session using the logout functionality:
+
+```python
+# Logout view from sensores/views.py:54
+def logOut(request):
+  logout(request)
+  return render(request, "login.html", {})
+```
+
+### Logout Process
+
+- Calls Django's `logout()` function to terminate the user session
+- Clears all session data and authentication tokens
+- Returns the user to the login page for re-authentication
+
+<Warning>
+  Logging out immediately terminates the session. Users will need to re-authenticate to access the dashboard.
+</Warning>
+
+## Protected Routes
+
+All main dashboard views require authentication before allowing access:
+
+```python
+# Authentication check from sensores/views.py:14
+if request.user.is_authenticated:
+    # Load and display sensor data
+    # ...
+else:    
+    return redirect(userLogin)
+```
+
+Protected routes include:
+
+- `/` - Main dashboard (home view)
+- `/temp-aquario/` - Aquarium temperature monitoring
+- `/temp-plantas/` - Plant temperature monitoring  
+- `/umidade/` - Humidity monitoring
+- `/nivel/` - Water level monitoring
+- `/ldr/` - Light sensor monitoring
+- `/tds/` - Water quality monitoring
+
+## API Authentication
+
+The REST API endpoints also require authentication using Django REST Framework's permission classes:
+
+```python
+# API authentication from sensores/views.py:98
+class TemperaturaAquarioViewset(viewsets.ViewSet):
+  permission_classes = (IsAuthenticated,)
+  def create(self, request):
+    serializer = TemperaturaAquarioSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)            
+    the_response = TemperaturaAquarioSerializer(serializer.save())
+    return Response(the_response.data, status=status.HTTP_201_CREATED)
+```
+
+<Info>
+  All API viewsets use `IsAuthenticated` permission class to ensure secure API access.
+</Info>
+
+### Protected API Endpoints
+
+All REST API endpoints require authentication:
+
+<CardGroup cols={2}>
+  <Card title="Aquarium Temperature" icon="thermometer">
+    `/api/temperatura-aquario/` - POST endpoint for aquarium temperature data
+  </Card>
+  <Card title="Plant Temperature" icon="temperature-half">
+    `/api/temperatura-plantas/` - POST endpoint for plant temperature data
+  </Card>
+  <Card title="Humidity" icon="droplet">
+    `/api/umidade/` - POST endpoint for humidity sensor data
+  </Card>
+  <Card title="Water Level" icon="water">
+    `/api/nivel/` - POST endpoint for water level sensor data
+  </Card>
+  <Card title="Light Sensor" icon="lightbulb">
+    `/api/ldr/` - POST endpoint for light sensor data
+  </Card>
+  <Card title="Water Quality" icon="vial">
+    `/api/tds/` - POST endpoint for TDS sensor data
+  </Card>
+</CardGroup>
+
+## Security Best Practices
+
+<AccordionGroup>
+  <Accordion title="Password Security">
+    Django automatically hashes passwords using PBKDF2 algorithm with SHA256. Never store or transmit passwords in plain text.
+  </Accordion>
+  
+  <Accordion title="Session Management">
+    Django creates secure session cookies with HTTP-only flags. Sessions expire based on your Django settings configuration.
+  </Accordion>
+  
+  <Accordion title="CSRF Protection">
+    All POST requests include CSRF token validation to prevent cross-site request forgery attacks.
+  </Accordion>
+  
+  <Accordion title="Active User Check">
+    The authentication system verifies that user accounts are active (`user.is_active`) before granting access.
+  </Accordion>
+</AccordionGroup>
+
+## Authentication URL Routes
+
+Authentication routes are defined in the URL configuration:
+
+```python
+# From sensores/urls.py:15-16
+path('login/', views.userLogin, name='login'),
+path('logout/', views.logOut, name='logout'),
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Login Failed">
+    - Verify username and password are correct
+    - Ensure the user account is active in Django admin
+    - Check that the user exists in the database
+  </Accordion>
+  
+  <Accordion title="Automatic Logout">
+    - Check session timeout settings in Django configuration
+    - Verify browser allows cookies
+    - Ensure session middleware is properly configured
+  </Accordion>
+  
+  <Accordion title="API Authentication Error">
+    - Confirm authentication token is included in API requests
+    - Verify the token is valid and not expired
+    - Check that the user has necessary permissions
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Monitoring Sensors" icon="chart-line" href="/dashboard/monitoring-sensors">
+    Learn how to monitor sensors after authentication
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/overview">
+    Integrate IoT devices using authenticated API calls
+  </Card>
+</CardGroup>

@@ -1,0 +1,379 @@
+---
+title: 'Raspberry Pi MQTT Bridge'
+description: 'Configure Raspberry Pi to bridge Arduino sensor data to MQTT broker'
+icon: 'server'
+---
+
+## Overview
+
+The Raspberry Pi acts as a bridge between the Arduino sensors and the MQTT broker. It reads sensor data from Arduino via USB serial connection and publishes it to specific MQTT topics for the Django backend to consume.
+
+## Architecture
+
+```mermaid
+graph LR
+    A[Arduino Sensors] -->|USB Serial| B[Raspberry Pi]
+    B -->|MQTT Publish| C[MQTT Broker]
+    C -->|MQTT Subscribe| D[Django Backend]
+```
+
+## Hardware Requirements
+
+- Raspberry Pi (any model with USB port)
+- USB cable (Type-A to Type-B for Arduino connection)
+- Network connection (Ethernet or WiFi)
+- Power supply for Raspberry Pi
+
+## Software Requirements
+
+<Steps>
+  <Step title="Install Python dependencies">
+    Install required Python libraries:
+    
+    ```bash
+    pip install paho-mqtt pyserial
+    ```
+    
+    Or using apt:
+    
+    ```bash
+    sudo apt-get update
+    sudo apt-get install python3-pip
+    pip3 install paho-mqtt pyserial
+    ```
+  </Step>
+
+  <Step title="Identify Arduino serial port">
+    Connect Arduino via USB and identify the serial port:
+    
+    ```bash
+    ls /dev/tty*
+    ```
+    
+    Common ports:
+    - `/dev/ttyACM0` - Most common for Arduino
+    - `/dev/ttyUSB0` - USB-to-Serial adapters
+    
+    <Note>
+    The bridge script uses `/dev/ttyACM0` by default. Update if your port differs.
+    </Note>
+  </Step>
+
+  <Step title="Set serial permissions">
+    Grant permission to access serial port:
+    
+    ```bash
+    sudo usermod -a -G dialout $USER
+    sudo chmod 666 /dev/ttyACM0
+    ```
+    
+    Log out and back in for group changes to take effect.
+  </Step>
+</Steps>
+
+## MQTT Bridge Configuration
+
+The bridge script (`mqtt-arduino.py`) reads sensor data from Arduino and publishes to MQTT topics.
+
+### Connection Settings
+
+Source: `~/workspace/source/Raspberry-pi/mqtt-arduino.py:6-11`
+
+```python
+import paho.mqtt.client as mqtt 
+import serial
+import time
+from textwrap import wrap
+
+# Broker MQTT Mosquito
+broker = 'localhost'
+port = 18083
+client_id = 'aqua'
+# username = '*****'
+# password = '*****'
+```
+
+<Warning>
+The default configuration uses `localhost` and port `18083`. Update these values to match your MQTT broker configuration.
+</Warning>
+
+### MQTT Topics
+
+The bridge publishes to six different topics:
+
+```python
+# MQTT Topics
+topic_temp = "sensores/temperatura"
+topic_hum = "sensores/umidade"
+topic_ldr = "sensores/ldr"
+topic_tds = "sensores/tds"
+topic_temp_agua = "sensores/temperatura-agua"
+topic_nivel = "sensores/nivel"
+```
+
+| Topic | Description | Units | Sensor |
+|-------|-------------|-------|--------|
+| `sensores/temperatura` | Plant area temperature | °C | DHT11 |
+| `sensores/umidade` | Plant area humidity | % | DHT11 |
+| `sensores/ldr` | Light intensity | lumen | LDR |
+| `sensores/tds` | Water quality (TDS) | ppm | Gravity TDS |
+| `sensores/temperatura-agua` | Water temperature | °C | DS18B20 |
+| `sensores/nivel` | Water level distance | cm | HC-SR04 |
+
+## Complete Bridge Script
+
+Source: `~/workspace/source/Raspberry-pi/mqtt-arduino.py`
+
+```python
+import paho.mqtt.client as mqtt 
+import serial
+import time
+from textwrap import wrap
+
+# Broker MQTT Mosquito
+broker = 'localhost'
+port = 18083
+client_id = 'aqua'
+# username = '*****'
+# password = '*****'
+
+# MQTT Topics
+topic_temp = "sensores/temperatura"
+topic_hum = "sensores/umidade"
+topic_ldr = "sensores/ldr"
+topic_tds = "sensores/tds"
+topic_temp_agua = "sensores/temperatura-agua"
+topic_nivel = "sensores/nivel"
+
+# Connection callback
+def on_connect(client, userdata, flags, rc):
+   if rc == 0:
+     print("Conetado ao broker")
+      
+# USB Serial Connection to Arduino
+ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
+time.sleep(2)
+       
+client = mqtt.Client(client_id)            
+client.on_connect = on_connect 
+client.connect(broker) 
+
+# Main loop
+i = 0
+
+while i < 1:
+    # Read sensor data from serial
+    line = ser.readline()   
+    if line:
+        string = line.decode() 
+        # Split values (5 characters each)
+        temp, hum, ldr, tds, temp_agua, nivel = wrap(string, 5)
+        
+        # Publish Temperature
+        print(temp)                  
+        client.publish(topic_temp, temp)
+        print("Temperatura")
+        
+        # Publish Humidity
+        print(hum)  
+        client.publish(topic_hum, hum)
+        print("Umidade")
+        
+        # Publish LDR
+        print(ldr)  
+        client.publish(topic_ldr, ldr)
+        print("LDR")
+        
+        # Publish TDS
+        print(tds)  
+        client.publish(topic_tds, tds)
+        print("TDS")
+        
+        # Publish Water Temperature
+        print(temp_agua)                  
+        client.publish(topic_temp_agua, temp_agua)
+        print("Temperatura Agua")
+        
+        # Publish Water Level
+        print(nivel)                  
+        client.publish(topic_nivel, nivel)
+        print("Nivel Agua")
+        
+ser.close()
+```
+
+## Serial Communication Settings
+
+The bridge expects serial data with these parameters:
+
+- **Baud Rate**: 9600 bps
+- **Data Format**: Text strings
+- **Timeout**: 1 second
+- **Encoding**: UTF-8
+
+<Note>
+The script uses `wrap(string, 5)` to split sensor values assuming each value is 5 characters. Ensure Arduino serial output formats values consistently.
+</Note>
+
+## Running the Bridge
+
+<Steps>
+  <Step title="Start MQTT broker">
+    Ensure your MQTT broker is running:
+    
+    ```bash
+    # If using Mosquitto
+    sudo systemctl status mosquitto
+    
+    # Start if not running
+    sudo systemctl start mosquitto
+    ```
+  </Step>
+
+  <Step title="Upload Arduino code">
+    Upload the sensor code to Arduino and verify serial output:
+    
+    ```bash
+    # Monitor Arduino serial output
+    screen /dev/ttyACM0 9600
+    ```
+    
+    Press `Ctrl+A` then `K` to exit screen.
+  </Step>
+
+  <Step title="Run the bridge script">
+    Execute the Python bridge:
+    
+    ```bash
+    python3 mqtt-arduino.py
+    ```
+    
+    Expected output:
+    ```
+    Conetado ao broker
+    24.50
+    Temperatura
+    65.00
+    Umidade
+    ...
+    ```
+  </Step>
+
+  <Step title="Verify MQTT messages">
+    In another terminal, subscribe to topics:
+    
+    ```bash
+    mosquitto_sub -h localhost -p 18083 -t "sensores/#" -v
+    ```
+    
+    You should see messages like:
+    ```
+    sensores/temperatura 24.50
+    sensores/umidade 65.00
+    sensores/ldr 30
+    sensores/tds 450
+    sensores/temperatura-agua 23.50
+    sensores/nivel 12.5
+    ```
+  </Step>
+</Steps>
+
+## Running as System Service
+
+To run the bridge automatically on boot:
+
+<Steps>
+  <Step title="Create systemd service file">
+    ```bash
+    sudo nano /etc/systemd/system/aqua-mqtt-bridge.service
+    ```
+    
+    Add the following:
+    
+    ```ini
+    [Unit]
+    Description=Aqua-IoT MQTT Bridge
+    After=network.target mosquitto.service
+    
+    [Service]
+    Type=simple
+    User=pi
+    WorkingDirectory=/home/pi
+    ExecStart=/usr/bin/python3 /home/pi/mqtt-arduino.py
+    Restart=always
+    RestartSec=10
+    
+    [Install]
+    WantedBy=multi-user.target
+    ```
+  </Step>
+
+  <Step title="Enable and start service">
+    ```bash
+    sudo systemctl daemon-reload
+    sudo systemctl enable aqua-mqtt-bridge.service
+    sudo systemctl start aqua-mqtt-bridge.service
+    ```
+  </Step>
+
+  <Step title="Check service status">
+    ```bash
+    sudo systemctl status aqua-mqtt-bridge.service
+    ```
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+### Serial Port Permission Denied
+
+```bash
+serial.serialutil.SerialException: [Errno 13] could not open port /dev/ttyACM0
+```
+
+**Solution**:
+```bash
+sudo chmod 666 /dev/ttyACM0
+sudo usermod -a -G dialout $USER
+```
+
+### Cannot Connect to Broker
+
+```
+Connection refused
+```
+
+**Solutions**:
+- Verify MQTT broker is running: `sudo systemctl status mosquitto`
+- Check broker address and port in script
+- Test connection: `mosquitto_pub -h localhost -p 18083 -t test -m "hello"`
+
+### No Serial Data Received
+
+**Solutions**:
+- Verify Arduino is connected: `ls /dev/ttyACM*`
+- Check baud rate matches (9600)
+- Monitor serial directly: `screen /dev/ttyACM0 9600`
+- Reset Arduino after connecting USB
+
+### Data Format Errors
+
+```
+ValueError: not enough values to unpack
+```
+
+**Solutions**:
+- Check Arduino serial output format
+- Verify `wrap(string, 5)` splits correctly
+- Add debug logging: `print(repr(string))`
+
+## Related Configuration
+
+<CardGroup cols={2}>
+  <Card title="MQTT Broker Setup" icon="message" href="/hardware/mqtt-broker">
+    Configure Mosquitto MQTT broker
+  </Card>
+  <Card title="Arduino Sensors" icon="microchip" href="/hardware/arduino-sensors">
+    Configure Arduino sensor code
+  </Card>
+</CardGroup>

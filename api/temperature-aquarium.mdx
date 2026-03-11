@@ -1,0 +1,260 @@
+---
+title: 'Temperature Aquarium API'
+description: 'Submit temperature readings from aquarium sensors'
+---
+
+## Overview
+
+The Temperature Aquarium endpoint allows you to submit temperature readings from aquarium monitoring sensors. This endpoint is used to track water temperature in aquarium environments.
+
+## Endpoint
+
+```
+POST /api/temperatura-aquario/
+```
+
+## Model Structure
+
+The `TemperaturaAquario` model extends the base `Sensor` model:
+
+```python
+class TemperaturaAquario(Sensor):
+    temperatura = models.FloatField(max_length=200, default='00')
+    unidade_medida = models.CharField(max_length=50, default='graus')
+```
+
+Source: `models.py:25-29`
+
+## ViewSet Implementation
+
+```python
+class TemperaturaAquarioViewset(viewsets.ViewSet):
+    permission_classes = (IsAuthenticated,)
+    
+    def create(self, request):
+        serializer = TemperaturaAquarioSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        the_response = TemperaturaAquarioSerializer(serializer.save())
+        return Response(the_response.data, status=status.HTTP_201_CREATED)
+```
+
+Source: `views.py:97-103`
+
+## Authentication
+
+<Warning>
+This endpoint requires authentication. Include your API token in the Authorization header.
+</Warning>
+
+```
+Authorization: Token 2d75140c068049278f9cb7d39b1a20f05aecdc56
+```
+
+See [Authentication](/api/authentication) for details.
+
+## Request Parameters
+
+<ParamField body="nome" type="string" required>
+  Sensor name identifier
+  
+  **Example:** `"Temperatura"`
+</ParamField>
+
+<ParamField body="tipo" type="string" required>
+  Type of sensor location
+  
+  **Example:** `"Acuario"`
+</ParamField>
+
+<ParamField body="grupo" type="string" required>
+  Sensor group classification
+  
+  **Example:** `"Grupo A"`
+</ParamField>
+
+<ParamField body="temperatura" type="float" required>
+  Temperature reading from the sensor
+  
+  **Example:** `25.5`
+</ParamField>
+
+<ParamField body="unidade_medida" type="string" required>
+  Unit of measurement for temperature
+  
+  **Default:** `"graus"`
+  
+  **Example:** `"graus"`
+</ParamField>
+
+## Response Fields
+
+<ResponseField name="id" type="integer">
+  Auto-generated unique identifier for the record
+</ResponseField>
+
+<ResponseField name="nome" type="string">
+  Sensor name as provided in request
+</ResponseField>
+
+<ResponseField name="tipo" type="string">
+  Sensor type as provided in request
+</ResponseField>
+
+<ResponseField name="grupo" type="string">
+  Sensor group as provided in request
+</ResponseField>
+
+<ResponseField name="temperatura" type="float">
+  Temperature value submitted
+</ResponseField>
+
+<ResponseField name="unidade_medida" type="string">
+  Unit of measurement for the temperature
+</ResponseField>
+
+<ResponseField name="data_criacao" type="datetime">
+  Timestamp when the record was created (auto-generated)
+</ResponseField>
+
+## Example Request
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/temperatura-aquario/ \
+  -H "Authorization: Token 2d75140c068049278f9cb7d39b1a20f05aecdc56" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "nome": "Temperatura",
+    "tipo": "Acuario",
+    "grupo": "Grupo A",
+    "temperatura": "25.5",
+    "unidade_medida": "graus"
+  }'
+```
+
+## Example Response
+
+**Status Code:** `201 Created`
+
+```json
+{
+  "id": 42,
+  "nome": "Temperatura",
+  "tipo": "Acuario",
+  "grupo": "Grupo A",
+  "temperatura": 25.5,
+  "unidade_medida": "graus",
+  "data_criacao": "2026-03-11T10:30:45.123456Z"
+}
+```
+
+## Error Responses
+
+### Missing Authentication Token
+
+**Status Code:** `401 Unauthorized`
+
+```json
+{
+  "detail": "Authentication credentials were not provided."
+}
+```
+
+### Invalid Token
+
+**Status Code:** `401 Unauthorized`
+
+```json
+{
+  "detail": "Invalid token."
+}
+```
+
+### Missing Required Fields
+
+**Status Code:** `400 Bad Request`
+
+```json
+{
+  "temperatura": [
+    "This field is required."
+  ],
+  "nome": [
+    "This field is required."
+  ]
+}
+```
+
+### Invalid Data Type
+
+**Status Code:** `400 Bad Request`
+
+```json
+{
+  "temperatura": [
+    "A valid number is required."
+  ]
+}
+```
+
+## MQTT Integration Example
+
+Example from the Raspberry Pi MQTT client:
+
+```python
+# From mqtt-django.py:76-88
+if message.topic == topic_temp_agua:
+    nome = "Temperatura"
+    tipo = "Acuario"
+    grupo = "Grupo A"
+    temperatura = str(message.payload.decode("utf-8"))
+    unidade_medida = "graus"
+    
+    temperatura_aquario = {
+        'nome': nome,
+        'tipo': tipo,
+        'grupo': grupo,
+        'temperatura': temperatura,
+        'unidade_medida': unidade_medida
+    }
+    
+    headers = {'Authorization': 'Token 2d75140c068049278f9cb7d39b1a20f05aecdc56'}
+    url_temperatura_aquario = "http://127.0.0.1:8000/api/temperatura-aquario/"
+    send_temperatura_aquario = requests.post(
+        url_temperatura_aquario,
+        headers=headers,
+        json=temperatura_aquario
+    )
+```
+
+## Serializer Details
+
+The endpoint uses `TemperaturaAquarioSerializer` with `depth=1` to include related object details:
+
+```python
+class TemperaturaAquarioSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TemperaturaAquario
+        fields = '__all__'
+        depth = 1
+
+    def create(self, validated_data):
+        temperatura = TemperaturaAquario.objects.create(**validated_data)
+        temperatura.save()
+        return temperatura
+```
+
+Source: `serializers.py:5-14`
+
+## Use Cases
+
+- Monitor aquarium water temperature in real-time
+- Track temperature fluctuations over time
+- Trigger alerts when temperature exceeds safe ranges
+- Historical temperature data analysis
+- IoT device integration via MQTT
+
+## Related Endpoints
+
+- [Temperature Plants API](/api/temperature-plants) - For plant environment temperature
+- [Water Level API](/api/water-level) - For monitoring water levels
+- [TDS Sensor API](/api/tds-sensor) - For water quality monitoring

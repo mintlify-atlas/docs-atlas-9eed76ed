@@ -1,0 +1,268 @@
+---
+title: 'Temperature Plants API'
+description: 'Submit temperature readings from plant environment sensors'
+---
+
+## Overview
+
+The Temperature Plants endpoint allows you to submit temperature readings from sensors monitoring plant environments. This endpoint tracks ambient temperature in plant growing areas.
+
+## Endpoint
+
+```
+POST /api/temperatura-plantas/
+```
+
+## Model Structure
+
+The `TemperaturaPlantas` model extends the base `Sensor` model:
+
+```python
+class TemperaturaPlantas(Sensor):
+    temperatura = models.FloatField(max_length=200, default='00')
+    unidade_medida = models.CharField(max_length=50, default='graus')
+```
+
+Source: `models.py:13-17`
+
+## ViewSet Implementation
+
+```python
+class TemperaturaPlantasViewset(viewsets.ViewSet):
+    permission_classes = (IsAuthenticated,)
+    
+    def create(self, request):
+        serializer = TemperaturaPlantasSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        the_response = TemperaturaPlantasSerializer(serializer.save())
+        return Response(the_response.data, status=status.HTTP_201_CREATED)
+```
+
+Source: `views.py:124-130`
+
+## Authentication
+
+<Warning>
+This endpoint requires authentication. Include your API token in the Authorization header.
+</Warning>
+
+```
+Authorization: Token 2d75140c068049278f9cb7d39b1a20f05aecdc56
+```
+
+See [Authentication](/api/authentication) for details.
+
+## Request Parameters
+
+<ParamField body="nome" type="string" required>
+  Sensor name identifier
+  
+  **Example:** `"Temperatura"`
+</ParamField>
+
+<ParamField body="tipo" type="string" required>
+  Type of sensor location
+  
+  **Example:** `"Plantas"`
+</ParamField>
+
+<ParamField body="grupo" type="string" required>
+  Sensor group classification
+  
+  **Example:** `"Grupo P"`
+</ParamField>
+
+<ParamField body="temperatura" type="float" required>
+  Temperature reading from the sensor
+  
+  **Example:** `22.8`
+</ParamField>
+
+<ParamField body="unidade_medida" type="string" required>
+  Unit of measurement for temperature
+  
+  **Default:** `"graus"`
+  
+  **Example:** `"graus"`
+</ParamField>
+
+## Response Fields
+
+<ResponseField name="id" type="integer">
+  Auto-generated unique identifier for the record
+</ResponseField>
+
+<ResponseField name="nome" type="string">
+  Sensor name as provided in request
+</ResponseField>
+
+<ResponseField name="tipo" type="string">
+  Sensor type as provided in request
+</ResponseField>
+
+<ResponseField name="grupo" type="string">
+  Sensor group as provided in request
+</ResponseField>
+
+<ResponseField name="temperatura" type="float">
+  Temperature value submitted
+</ResponseField>
+
+<ResponseField name="unidade_medida" type="string">
+  Unit of measurement for the temperature
+</ResponseField>
+
+<ResponseField name="data_criacao" type="datetime">
+  Timestamp when the record was created (auto-generated)
+</ResponseField>
+
+## Example Request
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/temperatura-plantas/ \
+  -H "Authorization: Token 2d75140c068049278f9cb7d39b1a20f05aecdc56" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "nome": "Temperatura",
+    "tipo": "Plantas",
+    "grupo": "Grupo P",
+    "temperatura": "22.8",
+    "unidade_medida": "graus"
+  }'
+```
+
+## Example Response
+
+**Status Code:** `201 Created`
+
+```json
+{
+  "id": 15,
+  "nome": "Temperatura",
+  "tipo": "Plantas",
+  "grupo": "Grupo P",
+  "temperatura": 22.8,
+  "unidade_medida": "graus",
+  "data_criacao": "2026-03-11T10:30:45.123456Z"
+}
+```
+
+## Error Responses
+
+### Missing Authentication Token
+
+**Status Code:** `401 Unauthorized`
+
+```json
+{
+  "detail": "Authentication credentials were not provided."
+}
+```
+
+### Invalid Token
+
+**Status Code:** `401 Unauthorized`
+
+```json
+{
+  "detail": "Invalid token."
+}
+```
+
+### Missing Required Fields
+
+**Status Code:** `400 Bad Request`
+
+```json
+{
+  "temperatura": [
+    "This field is required."
+  ],
+  "nome": [
+    "This field is required."
+  ]
+}
+```
+
+### Invalid Data Type
+
+**Status Code:** `400 Bad Request`
+
+```json
+{
+  "temperatura": [
+    "A valid number is required."
+  ]
+}
+```
+
+## MQTT Integration Example
+
+Example from the Raspberry Pi MQTT client:
+
+```python
+# From mqtt-django.py:22-34
+if message.topic == topic_temp:
+    nome = "Temperatura"
+    tipo = "Plantas"
+    grupo = "Grupo P"
+    temperatura = str(message.payload.decode("utf-8"))
+    unidade_medida = "graus"
+    
+    temperatura_plantas = {
+        'nome': nome,
+        'tipo': tipo,
+        'grupo': grupo,
+        'temperatura': temperatura,
+        'unidade_medida': unidade_medida
+    }
+    
+    headers = {'Authorization': 'Token 2d75140c068049278f9cb7d39b1a20f05aecdc56'}
+    url_temperatura_plantas = "http://127.0.0.1:8000/api/temperatura-plantas/"
+    send_temperatura_plantas = requests.post(
+        url_temperatura_plantas,
+        headers=headers,
+        json=temperatura_plantas
+    )
+```
+
+## Serializer Details
+
+The endpoint uses `TemperaturaPlantasSerializer` with `depth=1` to include related object details:
+
+```python
+class TemperaturaPlantasSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TemperaturaPlantas
+        fields = '__all__'
+        depth = 1
+
+    def create(self, validated_data):
+        temperatura = TemperaturaPlantas.objects.create(**validated_data)
+        temperatura.save()
+        return temperatura
+```
+
+Source: `serializers.py:41-50`
+
+## Use Cases
+
+- Monitor plant environment temperature in real-time
+- Track temperature fluctuations in growing areas
+- Trigger alerts when temperature is outside optimal range
+- Historical temperature data analysis for plant health
+- IoT device integration via MQTT
+- Greenhouse climate control
+
+## Best Practices
+
+1. **Regular Readings**: Submit temperature readings at consistent intervals (e.g., every 5-10 minutes)
+2. **Valid Ranges**: Ensure temperature values are within reasonable ranges for plant environments (typically 15-35°C)
+3. **Error Handling**: Implement retry logic for failed submissions
+4. **Data Validation**: Validate sensor readings before submission to avoid spurious data
+
+## Related Endpoints
+
+- [Temperature Aquarium API](/api/temperature-aquarium) - For aquarium water temperature
+- [Humidity API](/api/humidity) - For monitoring humidity in plant environments
+- [Light Sensor API](/api/light-sensor) - For monitoring light levels

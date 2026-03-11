@@ -1,0 +1,313 @@
+---
+title: 'Monitoring Sensors'
+description: 'Comprehensive guide to monitoring IoT sensors through the Aqua-IoT dashboard'
+---
+
+## Overview
+
+The Aqua-IoT dashboard provides real-time monitoring for six different sensor types, each designed to track specific environmental conditions in your aquaponics and plant monitoring systems. All sensor data is stored in Django models and retrieved through dedicated view functions.
+
+## Sensor Architecture
+
+All sensors inherit from a base `Sensor` model that provides common attributes:
+
+```python
+# Base sensor model from sensores/models.py:5
+class Sensor(models.Model):
+  nome = models.CharField(max_length=50)
+  tipo = models.CharField(max_length=50)
+  grupo = models.CharField(max_length=50)  
+  data_criacao = models.DateTimeField(auto_now_add=True)
+  class Meta:
+    abstract = True
+```
+
+<Info>
+  The abstract base model at `sensores/models.py:5` provides a consistent structure for all sensor types with name, type, group, and creation timestamp.
+</Info>
+
+## Sensor Types
+
+### Temperature Sensors (Plants)
+
+Monitor temperature conditions for plant environments:
+
+```python
+# Plant temperature model from sensores/models.py:13
+class TemperaturaPlantas(Sensor):
+  temperatura = models.FloatField(max_length=200, default='00')
+  unidade_medida = models.CharField(max_length=50, default='graus') 
+  def __str__(self):
+        return str(self.temperatura) + str(self.unidade_medida)
+```
+
+**View Implementation:**
+
+```python
+# View function from sensores/views.py:77
+def temperaturaPlantas(request):
+  temperatura = TemperaturaPlantas.objects.all()    
+  temperaturas = {'temperaturas': temperatura}  
+  return render(request, "temp-plantas.html", temperaturas)
+```
+
+- **URL Route**: `/temp-plantas/`
+- **Measurement Unit**: Degrees (graus)
+- **Use Case**: Monitoring greenhouse or indoor plant environments
+
+### Temperature Sensors (Aquarium)
+
+Track water temperature for aquatic ecosystems:
+
+```python
+# Aquarium temperature model from sensores/models.py:25
+class TemperaturaAquario(Sensor):
+  temperatura = models.FloatField(max_length=200, default='00')
+  unidade_medida = models.CharField(max_length=50, default='graus') 
+  def __str__(self):
+        return str(self.temperatura) + str(self.unidade_medida)
+```
+
+**View Implementation:**
+
+```python
+# View function from sensores/views.py:59
+def temperaturaAquario(request):
+  temperatura = TemperaturaAquario.objects.all()    
+  temperaturas = {'temperaturas': temperatura}  
+  return render(request, "temp-aquario.html", temperaturas)
+```
+
+- **URL Route**: `/temp-aquario/`
+- **Measurement Unit**: Degrees (graus)
+- **Use Case**: Aquaponics systems and fish tanks
+
+### Humidity Sensors
+
+Measure environmental humidity levels:
+
+```python
+# Humidity model from sensores/models.py:19
+class Umidade(Sensor):
+  umidade = models.FloatField(max_length=200, default='00')
+  unidade_medida = models.CharField(max_length=50, default='porcentagem')
+  def __str__(self):
+        return str(self.umidade) + str(self.unidade_medida)
+```
+
+**View Implementation:**
+
+```python
+# View function from sensores/views.py:65
+def umidade(request):
+  umidade = Umidade.objects.all()    
+  umidades = {'umidades': umidade}  
+  return render(request, "umidade.html", umidades)
+```
+
+- **URL Route**: `/umidade/`
+- **Measurement Unit**: Percentage (porcentagem)
+- **Use Case**: Monitoring air humidity for optimal growing conditions
+
+### Water Level Sensors
+
+Monitor water levels with configurable minimum thresholds:
+
+```python
+# Water level model from sensores/models.py:31
+class NivelAgua(Sensor):
+  nivel = models.FloatField(max_length=200, default='00')
+  nivel_minimo = models.FloatField(max_length=200, default='200')
+  unidade_medida = models.CharField(max_length=50, default='centímetros')
+  def __str__(self):
+        return str(self.nivel) + str(self.unidade_medida)
+```
+
+**View Implementation:**
+
+```python
+# View function from sensores/views.py:71
+def nivelAgua(request):
+  nivel = NivelAgua.objects.all()    
+  nivels = {'nivels': nivel}  
+  return render(request, "nivel.html", nivels)
+```
+
+- **URL Route**: `/nivel/`
+- **Measurement Unit**: Centimeters (centímetros)
+- **Unique Feature**: Configurable minimum level threshold (`nivel_minimo`)
+- **Use Case**: Reservoir and tank level monitoring with alerts
+
+### Light Sensors (LDR)
+
+Track ambient light conditions with average calculations:
+
+```python
+# Light sensor model from sensores/models.py:38
+class Ldr(Sensor):
+  luminosidade = models.FloatField(max_length=200, default='00')
+  media_luminosidade = models.FloatField(max_length=200, default='30')
+  unidade_medida = models.CharField(max_length=50, default='lumen') 
+  def __str__(self):
+        return str(self.luminosidade) + str(self.unidade_medida)
+```
+
+**View Implementation:**
+
+```python
+# View function from sensores/views.py:83
+def ldr(request):
+  ldr = Ldr.objects.all()    
+  ldrs = {'ldrs': ldr}  
+  return render(request, "ldr.html", ldrs)
+```
+
+- **URL Route**: `/ldr/`
+- **Measurement Unit**: Lumens (lumen)
+- **Unique Feature**: Average luminosity tracking (`media_luminosidade`)
+- **Use Case**: Automated lighting control and photoperiod management
+
+### Water Quality Sensors (TDS)
+
+Measure total dissolved solids for water quality monitoring:
+
+```python
+# TDS sensor model from sensores/models.py:45
+class Tds(Sensor):
+  tds = models.FloatField(max_length=200, default='00')
+  media_tds = models.FloatField(max_length=200, default='30')
+  unidade_medida = models.CharField(max_length=50, default='ppm')
+  def __str__(self):
+        return str(self.tds) + str(self.unidade_medida)
+```
+
+**View Implementation:**
+
+```python
+# View function from sensores/views.py:89
+def tds(request):
+  tds = Tds.objects.all()    
+  tdss = {'tdss': tds}  
+  return render(request, "tds.html", tdss)
+```
+
+- **URL Route**: `/tds/`
+- **Measurement Unit**: Parts per million (ppm)
+- **Unique Feature**: Average TDS tracking (`media_tds`)
+- **Use Case**: Nutrient solution monitoring in hydroponics/aquaponics
+
+## Dashboard Home View
+
+The main dashboard aggregates all sensor data into a unified monitoring interface:
+
+```python
+# Main dashboard from sensores/views.py:13
+def home(request):
+  if request.user.is_authenticated:
+    # Temperatura Plantas
+    temperaturap = TemperaturaPlantas.objects.all()  
+    # Nivel Agua 
+    nivel = NivelAgua.objects.all()   
+    # Umidade
+    umidade = Umidade.objects.all() 
+    # TDS
+    tds = Tds.objects.all()  
+    # Temperatura Aquario 
+    temperaturaa = TemperaturaAquario.objects.all() 
+    # LDR
+    ldr = Ldr.objects.all()  
+    # Dados  
+    context = {
+              'temperaturas': temperaturap,
+              'nivels': nivel,
+              'umidades': umidade,
+              'tdss': tds,
+              'temperaturaas': temperaturaa,
+              'ldrs': ldr,
+       }
+    return render(request, "index.html", context)
+```
+
+<Info>
+  The home view retrieves all sensor readings using Django ORM's `objects.all()` method, providing a complete snapshot of your monitoring system.
+</Info>
+
+## Monitoring Workflow
+
+<Steps>
+  <Step title="Navigate to Dashboard">
+    Access the main dashboard at `/` to view all sensor readings in one place
+  </Step>
+  <Step title="View Aggregated Data">
+    The home page displays current readings from all six sensor types
+  </Step>
+  <Step title="Access Specific Sensors">
+    Click on individual sensor categories to view detailed historical data
+  </Step>
+  <Step title="Monitor Trends">
+    Track changes over time using the timestamp data stored with each reading
+  </Step>
+</Steps>
+
+## Sensor Data Structure
+
+Each sensor type follows a consistent data structure:
+
+<CardGroup cols={2}>
+  <Card title="Common Attributes" icon="database">
+    - `nome`: Sensor name
+    - `tipo`: Sensor type
+    - `grupo`: Sensor group
+    - `data_criacao`: Creation timestamp
+  </Card>
+  <Card title="Measurement Fields" icon="gauge">
+    - Primary measurement value (temperatura, umidade, nivel, etc.)
+    - `unidade_medida`: Unit of measurement
+    - Optional: average or threshold values
+  </Card>
+</CardGroup>
+
+## URL Routes Summary
+
+All sensor monitoring routes are defined in the URL configuration:
+
+```python
+# Sensor routes from sensores/urls.py:17-22
+path('temp-aquario/', views.temperaturaAquario, name='temp-aquario'),
+path('temp-plantas/', views.temperaturaPlantas, name='temp-plantas'),
+path('umidade/', views.umidade, name='umidade'),
+path('nivel/', views.nivelAgua, name='nivel'),
+path('ldr/', views.ldr, name='ldr'),
+path('tds/', views.tds, name='tds'),
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Regular Monitoring">
+    Check the main dashboard regularly to ensure all sensors are reporting data. Missing or stale readings may indicate sensor or connectivity issues.
+  </Accordion>
+  
+  <Accordion title="Threshold Configuration">
+    For sensors with threshold fields (like `nivel_minimo` and `media_luminosidade`), configure appropriate values based on your specific environment requirements.
+  </Accordion>
+  
+  <Accordion title="Data Retention">
+    The system stores historical sensor data with timestamps. Plan your data retention policy based on storage capacity and analysis needs.
+  </Accordion>
+  
+  <Accordion title="Sensor Grouping">
+    Use the `grupo` field to organize sensors by physical location or system (e.g., "greenhouse-1", "tank-a") for easier management.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Data Visualization" icon="chart-bar" href="/dashboard/data-visualization">
+    Learn how to visualize and analyze sensor data trends
+  </Card>
+  <Card title="API Integration" icon="plug" href="/api/overview">
+    Connect IoT devices to send sensor data via REST API
+  </Card>
+</CardGroup>

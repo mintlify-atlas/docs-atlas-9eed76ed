@@ -1,0 +1,334 @@
+---
+title: 'TDS Sensor API'
+description: 'Submit Total Dissolved Solids (TDS) readings from aquarium water quality sensors'
+---
+
+## Overview
+
+The TDS Sensor endpoint allows you to submit Total Dissolved Solids (TDS) readings from sensors monitoring aquarium water quality. TDS measurements indicate the concentration of dissolved substances in water, which is critical for maintaining healthy aquatic environments.
+
+## Endpoint
+
+```
+POST /api/tds/
+```
+
+## Model Structure
+
+The `Tds` model extends the base `Sensor` model:
+
+```python
+class Tds(Sensor):
+    tds = models.FloatField(max_length=200, default='00')
+    media_tds = models.FloatField(max_length=200, default='30')
+    unidade_medida = models.CharField(max_length=50, default='ppm')
+```
+
+Source: `models.py:45-50`
+
+## ViewSet Implementation
+
+```python
+class TdsViewset(viewsets.ViewSet):
+    permission_classes = (IsAuthenticated,)
+    
+    def create(self, request):
+        serializer = TdsSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        the_response = TdsSerializer(serializer.save())
+        return Response(the_response.data, status=status.HTTP_201_CREATED)
+```
+
+Source: `views.py:142-148`
+
+## Authentication
+
+<Warning>
+This endpoint requires authentication. Include your API token in the Authorization header.
+</Warning>
+
+```
+Authorization: Token 2d75140c068049278f9cb7d39b1a20f05aecdc56
+```
+
+See [Authentication](/api/authentication) for details.
+
+## Request Parameters
+
+<ParamField body="nome" type="string" required>
+  Sensor name identifier
+  
+  **Example:** `"TDS"`
+</ParamField>
+
+<ParamField body="tipo" type="string" required>
+  Type of sensor location
+  
+  **Example:** `"Acuario"`
+</ParamField>
+
+<ParamField body="grupo" type="string" required>
+  Sensor group classification
+  
+  **Example:** `"Grupo A"`
+</ParamField>
+
+<ParamField body="tds" type="float" required>
+  Current TDS reading from the sensor (parts per million)
+  
+  **Example:** `320.5`
+</ParamField>
+
+<ParamField body="media_tds" type="float" required>
+  Average or target TDS level
+  
+  **Default:** `30`
+  
+  **Example:** `100`
+</ParamField>
+
+<ParamField body="unidade_medida" type="string" required>
+  Unit of measurement for TDS
+  
+  **Default:** `"ppm"`
+  
+  **Example:** `"ppm"`
+</ParamField>
+
+## Response Fields
+
+<ResponseField name="id" type="integer">
+  Auto-generated unique identifier for the record
+</ResponseField>
+
+<ResponseField name="nome" type="string">
+  Sensor name as provided in request
+</ResponseField>
+
+<ResponseField name="tipo" type="string">
+  Sensor type as provided in request
+</ResponseField>
+
+<ResponseField name="grupo" type="string">
+  Sensor group as provided in request
+</ResponseField>
+
+<ResponseField name="tds" type="float">
+  TDS value submitted (parts per million)
+</ResponseField>
+
+<ResponseField name="media_tds" type="float">
+  Average or target TDS level
+</ResponseField>
+
+<ResponseField name="unidade_medida" type="string">
+  Unit of measurement for TDS (typically ppm)
+</ResponseField>
+
+<ResponseField name="data_criacao" type="datetime">
+  Timestamp when the record was created (auto-generated)
+</ResponseField>
+
+## Example Request
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/tds/ \
+  -H "Authorization: Token 2d75140c068049278f9cb7d39b1a20f05aecdc56" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "nome": "TDS",
+    "tipo": "Acuario",
+    "grupo": "Grupo A",
+    "tds": "320.5",
+    "media_tds": 100,
+    "unidade_medida": "ppm"
+  }'
+```
+
+## Example Response
+
+**Status Code:** `201 Created`
+
+```json
+{
+  "id": 52,
+  "nome": "TDS",
+  "tipo": "Acuario",
+  "grupo": "Grupo A",
+  "tds": 320.5,
+  "media_tds": 100.0,
+  "unidade_medida": "ppm",
+  "data_criacao": "2026-03-11T10:30:45.123456Z"
+}
+```
+
+## Error Responses
+
+### Missing Authentication Token
+
+**Status Code:** `401 Unauthorized`
+
+```json
+{
+  "detail": "Authentication credentials were not provided."
+}
+```
+
+### Invalid Token
+
+**Status Code:** `401 Unauthorized`
+
+```json
+{
+  "detail": "Invalid token."
+}
+```
+
+### Missing Required Fields
+
+**Status Code:** `400 Bad Request`
+
+```json
+{
+  "tds": [
+    "This field is required."
+  ],
+  "nome": [
+    "This field is required."
+  ]
+}
+```
+
+### Invalid Data Type
+
+**Status Code:** `400 Bad Request`
+
+```json
+{
+  "tds": [
+    "A valid number is required."
+  ],
+  "media_tds": [
+    "A valid number is required."
+  ]
+}
+```
+
+## MQTT Integration Example
+
+Example from the Raspberry Pi MQTT client:
+
+```python
+# From mqtt-django.py:63-75
+if message.topic == topic_tds:
+    nome = "TDS"
+    tipo = "Acuario"
+    grupo = "Grupo A"
+    tds = str(message.payload.decode("utf-8"))
+    media_tds = 100
+    unidade_medida = "ppm"
+    
+    tds = {
+        'nome': nome,
+        'tipo': tipo,
+        'grupo': grupo,
+        'tds': tds,
+        'media_tds': media_tds,
+        'unidade_medida': unidade_medida
+    }
+    
+    headers = {'Authorization': 'Token 2d75140c068049278f9cb7d39b1a20f05aecdc56'}
+    url_tds = "http://127.0.0.1:8000/api/tds/"
+    send_tds = requests.post(
+        url_tds,
+        headers=headers,
+        json=tds
+    )
+```
+
+## Serializer Details
+
+The endpoint uses `TdsSerializer` with `depth=1` to include related object details:
+
+```python
+class TdsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Tds
+        fields = '__all__'
+        depth = 1
+
+    def create(self, validated_data):
+        tds = Tds.objects.create(**validated_data)
+        tds.save()
+        return tds
+```
+
+Source: `serializers.py:65-74`
+
+## Use Cases
+
+- Monitor water quality in aquariums in real-time
+- Track dissolved solids concentration over time
+- Trigger water changes when TDS levels exceed safe thresholds
+- Ensure optimal water quality for aquatic life
+- Historical water quality data analysis
+- IoT device integration via MQTT
+- Automated filtration system control
+
+## Understanding TDS Values
+
+TDS measures the concentration of dissolved inorganic and organic substances in water:
+
+### Acceptable TDS Ranges
+
+- **Freshwater Aquariums**: 50-300 ppm
+- **Planted Tanks**: 150-250 ppm
+- **Saltwater Aquariums**: 30,000-40,000 ppm (measured differently)
+- **Drinking Water**: < 500 ppm (EPA standard)
+
+### What TDS Measures
+
+- Dissolved minerals (calcium, magnesium, sodium)
+- Salts
+- Metals
+- Organic matter
+- Other dissolved substances
+
+<Info>
+  TDS does not measure contaminants, bacteria, or other harmful substances. It's an indicator of overall dissolved content but should be used alongside other water quality tests.
+</Info>
+
+## Best Practices
+
+1. **Regular Monitoring**: Submit TDS readings every 10-30 minutes for real-time tracking
+2. **Calibration**: Calibrate TDS sensors regularly with standard solutions
+3. **Temperature Compensation**: Many TDS sensors are temperature-dependent; ensure proper compensation
+4. **Baseline Tracking**: Use `media_tds` to track target TDS levels for your specific aquarium
+5. **Water Changes**: Plan water changes when TDS exceeds safe thresholds
+6. **Gradual Changes**: Avoid sudden TDS changes that can stress aquatic life
+
+## Safety Considerations
+
+<Warning>
+  - High TDS levels can stress or harm aquatic life
+  - Sudden TDS changes are more dangerous than gradual increases
+  - Different fish species have different TDS tolerance ranges
+  - Monitor TDS trends, not just absolute values
+  - Combine TDS monitoring with pH and temperature for complete water quality assessment
+</Warning>
+
+## Troubleshooting High TDS
+
+If TDS levels are too high:
+
+1. Perform partial water changes with purified water
+2. Check for overfeeding (uneaten food increases TDS)
+3. Inspect filtration system functionality
+4. Test source water TDS before adding to aquarium
+5. Consider using reverse osmosis (RO) water for dilution
+
+## Related Endpoints
+
+- [Temperature Aquarium API](/api/temperature-aquarium) - For aquarium water temperature
+- [Water Level API](/api/water-level) - For monitoring water levels
+- [Light Sensor API](/api/light-sensor) - For monitoring light levels

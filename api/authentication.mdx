@@ -1,0 +1,186 @@
+---
+title: 'Authentication'
+description: 'Token-based authentication for the Aqua-IoT API'
+---
+
+## Overview
+
+The Aqua-IoT API uses Django REST Framework's token-based authentication. All API endpoints require authentication using a valid token in the request header.
+
+## Authentication Method
+
+All endpoints use the `IsAuthenticated` permission class, requiring a valid authentication token for every request.
+
+### Implementation Details
+
+From `views.py`, each viewset enforces authentication:
+
+```python
+class TemperaturaAquarioViewset(viewsets.ViewSet):
+    permission_classes = (IsAuthenticated,)
+    # ...
+```
+
+## Authentication Token
+
+The system uses a pre-configured authentication token:
+
+```
+2d75140c068049278f9cb7d39b1a20f05aecdc56
+```
+
+<Note>
+This token is currently used by the MQTT-Django bridge for submitting sensor data from IoT devices.
+</Note>
+
+## Using the Token
+
+### Header Format
+
+Include the token in the `Authorization` header of every API request:
+
+```
+Authorization: Token 2d75140c068049278f9cb7d39b1a20f05aecdc56
+```
+
+### Example Request
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/temperatura-aquario/ \
+  -H "Authorization: Token 2d75140c068049278f9cb7d39b1a20f05aecdc56" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "nome": "Temperatura",
+    "tipo": "Acuario",
+    "grupo": "Grupo A",
+    "temperatura": "25.5",
+    "unidade_medida": "graus"
+  }'
+```
+
+## Authentication Flow
+
+<Steps>
+  <Step title="Include Token">
+    Add the `Authorization` header with your token to every request
+  </Step>
+  
+  <Step title="DRF Validates">
+    Django REST Framework validates the token against the database
+  </Step>
+  
+  <Step title="Permission Check">
+    The `IsAuthenticated` permission class verifies the user is authenticated
+  </Step>
+  
+  <Step title="Process Request">
+    If authentication succeeds, the request is processed
+  </Step>
+</Steps>
+
+## MQTT Integration Example
+
+The Raspberry Pi MQTT client demonstrates proper token usage:
+
+```python
+# From mqtt-django.py
+headers = {'Authorization': 'Token 2d75140c068049278f9cb7d39b1a20f05aecdc56'}
+url_temperatura_aquario = "http://127.0.0.1:8000/api/temperatura-aquario/"
+send_temperatura_aquario = requests.post(
+    url_temperatura_aquario, 
+    headers=headers, 
+    json=temperatura_aquario
+)
+```
+
+## Error Responses
+
+### Missing Token
+
+If the `Authorization` header is missing:
+
+**Status Code:** `401 Unauthorized`
+
+```json
+{
+  "detail": "Authentication credentials were not provided."
+}
+```
+
+### Invalid Token
+
+If the token is invalid or expired:
+
+**Status Code:** `401 Unauthorized`
+
+```json
+{
+  "detail": "Invalid token."
+}
+```
+
+### Missing Permissions
+
+If the authenticated user lacks required permissions:
+
+**Status Code:** `403 Forbidden`
+
+```json
+{
+  "detail": "You do not have permission to perform this action."
+}
+```
+
+## Security Considerations
+
+<Warning>
+  - Never expose your authentication token in public repositories or client-side code
+  - Store tokens securely in environment variables or secure configuration files
+  - Rotate tokens periodically for enhanced security
+  - Use HTTPS in production to encrypt token transmission
+</Warning>
+
+## Token Management
+
+### Generating New Tokens
+
+To generate a new authentication token in Django:
+
+```python
+from rest_framework.authtoken.models import Token
+from django.contrib.auth.models import User
+
+user = User.objects.get(username='your_username')
+token = Token.objects.create(user=user)
+print(token.key)
+```
+
+### Viewing Existing Tokens
+
+```python
+from rest_framework.authtoken.models import Token
+
+token = Token.objects.get(user__username='your_username')
+print(token.key)
+```
+
+## Best Practices
+
+1. **Store Securely**: Keep tokens in environment variables or secure vaults
+2. **Use HTTPS**: Always use HTTPS in production environments
+3. **Validate Responses**: Check for 401/403 status codes and handle re-authentication
+4. **Token Rotation**: Implement periodic token rotation for security
+5. **Scope Limitations**: Create separate tokens for different services or devices
+
+## Testing Authentication
+
+Test your authentication setup with a simple request:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/temperatura-aquario/ \
+  -H "Authorization: Token 2d75140c068049278f9cb7d39b1a20f05aecdc56" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+A `400 Bad Request` response indicates authentication succeeded but data validation failed. A `401 Unauthorized` response indicates authentication issues.

@@ -1,0 +1,279 @@
+---
+title: 'Humidity API'
+description: 'Submit humidity readings from plant environment sensors'
+---
+
+## Overview
+
+The Humidity endpoint allows you to submit humidity readings from sensors monitoring plant environments. This endpoint tracks relative humidity levels in plant growing areas.
+
+## Endpoint
+
+```
+POST /api/umidade/
+```
+
+## Model Structure
+
+The `Umidade` model extends the base `Sensor` model:
+
+```python
+class Umidade(Sensor):
+    umidade = models.FloatField(max_length=200, default='00')
+    unidade_medida = models.CharField(max_length=50, default='porcentagem')
+```
+
+Source: `models.py:19-23`
+
+## ViewSet Implementation
+
+```python
+class UmidadeViewset(viewsets.ViewSet):
+    permission_classes = (IsAuthenticated,)
+    
+    def create(self, request):
+        serializer = UmidadeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        the_response = UmidadeSerializer(serializer.save())
+        return Response(the_response.data, status=status.HTTP_201_CREATED)
+```
+
+Source: `views.py:106-112`
+
+## Authentication
+
+<Warning>
+This endpoint requires authentication. Include your API token in the Authorization header.
+</Warning>
+
+```
+Authorization: Token 2d75140c068049278f9cb7d39b1a20f05aecdc56
+```
+
+See [Authentication](/api/authentication) for details.
+
+## Request Parameters
+
+<ParamField body="nome" type="string" required>
+  Sensor name identifier
+  
+  **Example:** `"Umidade"`
+</ParamField>
+
+<ParamField body="tipo" type="string" required>
+  Type of sensor location
+  
+  **Example:** `"Plantas"`
+</ParamField>
+
+<ParamField body="grupo" type="string" required>
+  Sensor group classification
+  
+  **Example:** `"Grupo P"`
+</ParamField>
+
+<ParamField body="umidade" type="float" required>
+  Humidity reading from the sensor (percentage)
+  
+  **Example:** `65.5`
+</ParamField>
+
+<ParamField body="unidade_medida" type="string" required>
+  Unit of measurement for humidity
+  
+  **Default:** `"porcentagem"`
+  
+  **Example:** `"porcentagem"`
+</ParamField>
+
+## Response Fields
+
+<ResponseField name="id" type="integer">
+  Auto-generated unique identifier for the record
+</ResponseField>
+
+<ResponseField name="nome" type="string">
+  Sensor name as provided in request
+</ResponseField>
+
+<ResponseField name="tipo" type="string">
+  Sensor type as provided in request
+</ResponseField>
+
+<ResponseField name="grupo" type="string">
+  Sensor group as provided in request
+</ResponseField>
+
+<ResponseField name="umidade" type="float">
+  Humidity value submitted (percentage)
+</ResponseField>
+
+<ResponseField name="unidade_medida" type="string">
+  Unit of measurement for the humidity
+</ResponseField>
+
+<ResponseField name="data_criacao" type="datetime">
+  Timestamp when the record was created (auto-generated)
+</ResponseField>
+
+## Example Request
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/umidade/ \
+  -H "Authorization: Token 2d75140c068049278f9cb7d39b1a20f05aecdc56" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "nome": "Umidade",
+    "tipo": "Plantas",
+    "grupo": "Grupo P",
+    "umidade": "65.5",
+    "unidade_medida": "porcentagem"
+  }'
+```
+
+## Example Response
+
+**Status Code:** `201 Created`
+
+```json
+{
+  "id": 28,
+  "nome": "Umidade",
+  "tipo": "Plantas",
+  "grupo": "Grupo P",
+  "umidade": 65.5,
+  "unidade_medida": "porcentagem",
+  "data_criacao": "2026-03-11T10:30:45.123456Z"
+}
+```
+
+## Error Responses
+
+### Missing Authentication Token
+
+**Status Code:** `401 Unauthorized`
+
+```json
+{
+  "detail": "Authentication credentials were not provided."
+}
+```
+
+### Invalid Token
+
+**Status Code:** `401 Unauthorized`
+
+```json
+{
+  "detail": "Invalid token."
+}
+```
+
+### Missing Required Fields
+
+**Status Code:** `400 Bad Request`
+
+```json
+{
+  "umidade": [
+    "This field is required."
+  ],
+  "nome": [
+    "This field is required."
+  ]
+}
+```
+
+### Invalid Data Type
+
+**Status Code:** `400 Bad Request`
+
+```json
+{
+  "umidade": [
+    "A valid number is required."
+  ]
+}
+```
+
+## MQTT Integration Example
+
+Example from the Raspberry Pi MQTT client:
+
+```python
+# From mqtt-django.py:36-47
+if message.topic == topic_hum:
+    nome = "Umidade"
+    tipo = "Plantas"
+    grupo = "Grupo P"
+    umidade = str(message.payload.decode("utf-8"))
+    unidade_medida = "porcentagem"
+    
+    umidade = {
+        'nome': nome,
+        'tipo': tipo,
+        'grupo': grupo,
+        'umidade': umidade,
+        'unidade_medida': unidade_medida
+    }
+    
+    headers = {'Authorization': 'Token 2d75140c068049278f9cb7d39b1a20f05aecdc56'}
+    url_umidade = "http://127.0.0.1:8000/api/umidade/"
+    send_umidade = requests.post(
+        url_umidade,
+        headers=headers,
+        json=umidade
+    )
+```
+
+## Serializer Details
+
+The endpoint uses `UmidadeSerializer` with `depth=1` to include related object details:
+
+```python
+class UmidadeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Umidade
+        fields = '__all__'
+        depth = 1
+
+    def create(self, validated_data):
+        umidade = Umidade.objects.create(**validated_data)
+        umidade.save()
+        return umidade
+```
+
+Source: `serializers.py:17-26`
+
+## Use Cases
+
+- Monitor relative humidity in plant growing environments
+- Track humidity fluctuations throughout the day
+- Trigger irrigation or ventilation based on humidity levels
+- Historical humidity data analysis for plant health
+- IoT device integration via MQTT
+- Greenhouse climate control
+- Prevent mold and fungal issues
+
+## Optimal Humidity Ranges
+
+Different plants require different humidity levels:
+
+- **Tropical Plants**: 60-80%
+- **Succulents**: 30-50%
+- **General Houseplants**: 40-60%
+- **Seedlings**: 70-90%
+
+## Best Practices
+
+1. **Regular Readings**: Submit humidity readings at consistent intervals (e.g., every 5-10 minutes)
+2. **Valid Ranges**: Ensure humidity values are between 0-100%
+3. **Error Handling**: Implement retry logic for failed submissions
+4. **Data Validation**: Validate sensor readings before submission
+5. **Calibration**: Regularly calibrate humidity sensors for accuracy
+
+## Related Endpoints
+
+- [Temperature Plants API](/api/temperature-plants) - For monitoring temperature in plant environments
+- [Light Sensor API](/api/light-sensor) - For monitoring light levels
+- [Water Level API](/api/water-level) - For monitoring water levels

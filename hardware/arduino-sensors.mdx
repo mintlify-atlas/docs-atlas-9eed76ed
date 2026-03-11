@@ -1,0 +1,305 @@
+---
+title: 'Arduino Sensor Setup'
+description: 'Configure and connect multiple sensors to Arduino for aquaponics monitoring'
+icon: 'microchip'
+---
+
+## Overview
+
+The Aqua-IoT system uses an Arduino board with multiple sensors to monitor environmental conditions for both aquarium and plant areas. The main sensor configuration is located in `sensores.ino` which integrates all sensor readings into a single monitoring system.
+
+## Hardware Components
+
+The system uses the following sensors:
+
+- **DHT11** - Temperature and humidity sensor for plant environment
+- **DS18B20** - Waterproof temperature sensor for aquarium water
+- **Gravity TDS** - Total Dissolved Solids sensor for water quality
+- **HC-SR04** - Ultrasonic sensor for water level monitoring
+- **LDR (Photoresistor)** - Light intensity sensor for plant monitoring
+
+## Required Libraries
+
+Install these libraries through the Arduino IDE Library Manager:
+
+```cpp
+#include "DHT.h"              // DHT sensor library
+#include <OneWire.h>           // OneWire protocol for DS18B20
+#include <DallasTemperature.h> // DS18B20 temperature sensor
+#include <EEPROM.h>            // EEPROM for TDS calibration
+#include "GravityTDS.h"        // Gravity TDS sensor library
+```
+
+## Pin Configuration
+
+The following pins are used in the complete sensor setup:
+
+| Sensor | Pin | Type | Purpose |
+|--------|-----|------|----------|
+| DHT11 | 2 | Digital | Temperature & humidity (plants) |
+| HC-SR04 Echo | 4 | Digital | Ultrasonic distance (water level) |
+| HC-SR04 Trigger | 6 | Digital | Ultrasonic trigger (water level) |
+| DS18B20 | 10 | Digital (OneWire) | Water temperature |
+| LDR | A0 | Analog | Light intensity |
+| TDS Sensor | A4 | Analog | Water quality (TDS) |
+
+<Note>
+All sensors operate at 5V. Ensure your Arduino board provides stable 5V output for accurate readings.
+</Note>
+
+## Complete Sensor Setup
+
+<Steps>
+  <Step title="Define sensor constants">
+    Configure the pin assignments and sensor parameters:
+    
+    ```cpp
+    // DHT11 Configuration
+    #define DHTPIN 2
+    #define DHTTYPE DHT11
+    
+    // DS18B20 Water Temperature
+    #define DS18B20 10
+    
+    // TDS Sensor
+    #define TdsSensorPin A4
+    
+    // HC-SR04 Ultrasonic
+    const int echo = 4;
+    const int trigger = 6;
+    
+    // LDR Configuration
+    const int sensorPin = A0;
+    #define VIN 5          // Operating voltage
+    #define R 10000        // 10K resistor value
+    #define DELAY 500      // Reading delay
+    ```
+  </Step>
+
+  <Step title="Initialize sensor objects">
+    Create instances of sensor libraries:
+    
+    ```cpp
+    // Initialize DHT11
+    DHT dht(DHTPIN, DHTTYPE);
+    
+    // Initialize DS18B20
+    OneWire ourWire(DS18B20);
+    DallasTemperature sensors(&ourWire);
+    
+    // Initialize TDS Sensor
+    GravityTDS gravityTds;
+    float media = 25;  // Average temperature for TDS compensation
+    float tdsValue = 0;
+    
+    // HC-SR04 Variables
+    long tempo;
+    float distancia;
+    
+    // LDR Variables
+    int sensorVal;
+    int lux;
+    ```
+  </Step>
+
+  <Step title="Configure setup() function">
+    Initialize serial communication and configure all sensors:
+    
+    ```cpp
+    void setup() {
+      Serial.begin(9600);
+      Serial.println(F("Sensor Ativado"));
+    
+      // Start DHT11
+      dht.begin();
+    
+      // Start DS18B20
+      sensors.begin();
+    
+      // Configure TDS Sensor
+      gravityTds.setPin(TdsSensorPin);
+      gravityTds.setAref(5.0);      // 5V reference voltage
+      gravityTds.setAdcRange(1024); // 10-bit ADC
+      gravityTds.begin();
+    
+      // Configure HC-SR04
+      pinMode(echo, INPUT);
+      pinMode(trigger, OUTPUT);
+      
+      delay(100);
+    }
+    ```
+  </Step>
+
+  <Step title="Implement sensor reading loop">
+    Read all sensors and output data via serial:
+    
+    ```cpp
+    void loop() {
+      delay(2000);  // 2-second reading interval
+    
+      // Read DHT11 (Temperature & Humidity)
+      float h = dht.readHumidity();
+      float t = dht.readTemperature();
+      float f = dht.readTemperature(true);
+    
+      if (isnan(h) || isnan(t) || isnan(f)) {
+        Serial.println(F("Erro na leitura do sensor"));
+        return;
+      }
+    
+      Serial.print(F("Umidade: "));
+      Serial.print(h);
+      Serial.print(F("%  Temperatura: "));
+      Serial.print(t);
+      Serial.print(F("°C "));
+      Serial.print(f);
+      Serial.println(F("°F"));
+    
+      // Read DS18B20 (Water Temperature)
+      sensors.requestTemperatures();
+      Serial.print("Temperatura: ");
+      Serial.print(sensors.getTempCByIndex(0));
+      Serial.println("°C");
+    
+      // Read TDS Sensor
+      gravityTds.setTemperature(media);
+      gravityTds.update();
+      tdsValue = gravityTds.getTdsValue();
+      Serial.print(tdsValue, 0);
+      Serial.println("ppm");
+    
+      // Read HC-SR04 (Water Level)
+      calculo();
+      Serial.print("Distância: ");
+      Serial.print(distancia);
+      Serial.print("cm");
+      Serial.println();
+    
+      // Read LDR (Light Intensity)
+      sensorVal = analogRead(sensorPin);
+      lux = sensorRawToPhys(sensorVal);
+      Serial.print(F("O valor do sensor é = "));
+      Serial.println(sensorVal);
+      Serial.print(F("O valor físico é = "));
+      Serial.print(lux);
+      Serial.println(F(" lumen"));
+      delay(DELAY);
+    }
+    ```
+  </Step>
+</Steps>
+
+## Sensor-Specific Functions
+
+### HC-SR04 Distance Calculation
+
+The ultrasonic sensor measures water level by calculating distance:
+
+```cpp
+void calculo() {
+  digitalWrite(trigger, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigger, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigger, LOW);
+  
+  tempo = pulseIn(echo, HIGH);
+  // Distance formula: (time * speed of sound) / 2
+  distancia = float(tempo * 0.0343) / 2;
+  delay(10);
+}
+```
+
+### LDR Lux Conversion
+
+Convert LDR analog reading to physical lux value:
+
+```cpp
+int sensorRawToPhys(int raw) {
+  // Convert analog to voltage
+  float Vout = float(raw) * (VIN / float(1024));
+  
+  // Convert voltage to resistance
+  float RLDR = (R * (VIN - Vout)) / Vout;
+  
+  // Convert resistance to lumen
+  int phys = 500 / (RLDR / 1000);
+  return phys;
+}
+```
+
+## Serial Communication Settings
+
+<Warning>
+The serial baud rate is set to **9600 bps**. Ensure your Raspberry Pi bridge uses the same baud rate for proper communication.
+</Warning>
+
+Serial output format:
+```
+Sensor Ativado
+Umidade: 65.00%  Temperatura: 24.00°C 75.20°F
+Temperatura: 23.50°C
+450ppm
+Distância: 12.5cm
+O valor do sensor é = 512
+O valor físico é = 30 lumen
+```
+
+## Individual Sensor Examples
+
+For testing individual sensors, refer to the standalone files:
+
+- **DHT11 only**: `~/workspace/source/Arduino/temperatura-umidade.ino`
+- **DS18B20 only**: `~/workspace/source/Arduino/temperatura-agua.ino`
+- **TDS only**: `~/workspace/source/Arduino/tds.ino`
+- **LDR only**: `~/workspace/source/Arduino/ldr.ino`
+- **HC-SR04 only**: `~/workspace/source/Arduino/nivel-agua.ino`
+
+## Troubleshooting
+
+### DHT11 Reading Errors
+
+If you see "Erro na leitura do sensor":
+- Check 5V power connection
+- Verify pin connection to Digital Pin 2
+- Ensure 2-second delay between readings
+- Check DHT library installation
+
+### DS18B20 Returns -127°C
+
+- Verify OneWire connection on Pin 10
+- Add 4.7K pull-up resistor between data line and VCC
+- Check sensor polarity (GND, Data, VCC)
+
+### TDS Sensor Unstable Readings
+
+- Calibrate sensor using `gravityTds.begin()`
+- Ensure probe is fully submerged
+- Use temperature compensation (default 25°C)
+- Clean probe contacts regularly
+
+### HC-SR04 Distance Errors
+
+- Keep sensor away from angled surfaces
+- Ensure trigger (Pin 6) and echo (Pin 4) are correctly connected
+- Maximum range: ~4 meters
+- Minimum range: ~2 cm
+
+### LDR Returns 0 or Maximum
+
+- Check 10K resistor connection
+- Verify analog pin A0 connection
+- Test with different lighting conditions
+- Ensure proper voltage divider circuit
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Raspberry Pi Bridge" icon="server" href="/hardware/raspberry-pi-bridge">
+    Set up the MQTT bridge to receive sensor data
+  </Card>
+  <Card title="Wiring Diagram" icon="diagram-project" href="/hardware/wiring-diagram">
+    View complete hardware wiring connections
+  </Card>
+</CardGroup>
